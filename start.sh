@@ -4,5 +4,15 @@ set -e
 cd "$(dirname "$0")"
 
 echo "Démarrage de syswatch..."
-open "http://localhost:8080"
-uv run server.py
+
+# API Python en arrière-plan
+uv run server.py &
+API_PID=$!
+
+# Frontend Vite (ouvre le navigateur automatiquement)
+cd frontend
+npm install --silent
+npm run dev -- --open
+
+# Arrête l'API quand Vite se ferme (Ctrl+C)
+kill $API_PID 2>/dev/null
