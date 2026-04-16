@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>syswatch</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -40,13 +41,40 @@
     .stats { font-size: 0.82rem; color: #888; display: flex; justify-content: space-between; }
     .stats span { color: #ccc; }
     #refresh-info { font-size: 0.75rem; color: #555; margin-top: 1.5rem; }
+
+    #ram-card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      padding: 1.2rem 1.5rem;
+      margin-bottom: 1rem;
+      max-width: 520px;
+    }
+    #ram-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 0.8rem;
+    }
+    #ram-title { font-size: 0.95rem; color: #fff; font-weight: 600; }
+    #ram-stats { font-size: 0.82rem; color: #888; }
+    #ram-stats span { color: #ccc; }
+    #ram-chart-wrap { position: relative; height: 100px; }
   </style>
 </head>
 <body>
   <h1>syswatch</h1>
 
   <h2>RAM</h2>
-  <div id="ram"></div>
+  <div id="ram-card">
+    <div id="ram-header">
+      <div id="ram-title">Mémoire vive</div>
+      <div id="ram-stats">— Go utilisés sur — Go</div>
+    </div>
+    <div id="ram-chart-wrap">
+      <canvas id="ram-chart"></canvas>
+    </div>
+  </div>
 
   <h2>Disques</h2>
   <div id="disks"></div>
@@ -54,6 +82,8 @@
   <p id="refresh-info">Rafraichissement toutes les 3 secondes</p>
 
   <script>
+    const MAX_POINTS = 60;
+
     function fmt(bytes) {
       const gb = bytes / 1e9;
       return gb >= 1 ? gb.toFixed(1) + " Go" : (bytes / 1e6).toFixed(0) + " Mo";
@@ -71,16 +101,63 @@
         </div>`;
     }
 
+    // --- Graphe RAM ---
+    const ramChart = new Chart(document.getElementById("ram-chart"), {
+      type: "line",
+      data: {
+        labels: [],
+        datasets: [{
+          data: [],
+          borderColor: "#a78bfa",
+          backgroundColor: "rgba(167,139,250,0.1)",
+          borderWidth: 2,
+          pointRadius: 0,
+          fill: true,
+          tension: 0.4,
+        }]
+      },
+      options: {
+        animation: false,
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: {
+          callbacks: { label: ctx => ` ${ctx.parsed.y.toFixed(1)} %` }
+        }},
+        scales: {
+          x: { display: false },
+          y: {
+            min: 0, max: 100,
+            grid: { color: "#222" },
+            ticks: { color: "#555", callback: v => v + "%" },
+          }
+        }
+      }
+    });
+
+    function pushRamPoint(pct) {
+      const now = new Date().toLocaleTimeString("fr-FR");
+      ramChart.data.labels.push(now);
+      ramChart.data.datasets[0].data.push(pct);
+      if (ramChart.data.labels.length > MAX_POINTS) {
+        ramChart.data.labels.shift();
+        ramChart.data.datasets[0].data.shift();
+      }
+      // couleur selon charge
+      const color = pct > 80 ? "#f75f5f" : "#a78bfa";
+      ramChart.data.datasets[0].borderColor = color;
+      ramChart.data.datasets[0].backgroundColor = color.replace(")", ",0.1)").replace("rgb", "rgba");
+      ramChart.update();
+    }
+
     async function refresh() {
       try {
         const [ramRes, disksRes] = await Promise.all([fetch("/api/ram"), fetch("/api/disks")]);
         const ram = await ramRes.json();
         const disks = await disksRes.json();
 
-        document.getElementById("ram").innerHTML = card(
-          "Mémoire vive", null, Math.round(ram.percent),
-          [["Utilisée", fmt(ram.used)], ["Disponible", fmt(ram.available)], ["Total", fmt(ram.total)]]
-        );
+        pushRamPoint(ram.percent);
+        document.getElementById("ram-stats").innerHTML =
+          `<span>${fmt(ram.used)}</span> utilisés &mdash; <span>${fmt(ram.available)}</span> libres &mdash; total <span>${fmt(ram.total)}</span>`;
 
         document.getElementById("disks").innerHTML = disks.map(d => {
           const pct = Math.round((d.used / d.total) * 100);
@@ -90,7 +167,7 @@
         }).join("");
 
       } catch (e) {
-        document.getElementById("ram").innerHTML = "<p style='color:#f75f5f'>Impossible de contacter le serveur.</p>";
+        document.getElementById("ram-card").innerHTML = "<p style='color:#f75f5f'>Impossible de contacter le serveur.</p>";
       }
     }
 
