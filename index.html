@@ -13,17 +13,34 @@
       padding: 2rem;
     }
     h1 { font-size: 1.4rem; margin-bottom: 1.5rem; color: #fff; letter-spacing: 0.05em; }
-    h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; color: #555; margin-bottom: 0.75rem; margin-top: 1.5rem; }
+    h2 {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #444;
+      margin-bottom: 0.75rem;
+      margin-top: 2rem;
+    }
     .card {
       background: #1a1a1a;
       border: 1px solid #2a2a2a;
       border-radius: 10px;
       padding: 1.2rem 1.5rem;
       margin-bottom: 1rem;
-      max-width: 520px;
+      max-width: 540px;
     }
-    .card-title { font-size: 0.95rem; color: #aaa; margin-bottom: 0.6rem; }
-    .card-title span { color: #fff; font-weight: 600; }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 0.8rem;
+    }
+    .card-title { font-size: 0.95rem; color: #fff; font-weight: 600; }
+    .card-sub { font-size: 0.82rem; color: #888; }
+    .card-sub span { color: #ccc; }
+    .chart-wrap { position: relative; height: 90px; }
+
+    /* barres disques */
     .bar-track {
       background: #2a2a2a;
       border-radius: 999px;
@@ -40,39 +57,55 @@
     .bar-fill.warning { background: linear-gradient(90deg, #f7a24f, #f75f5f); }
     .stats { font-size: 0.82rem; color: #888; display: flex; justify-content: space-between; }
     .stats span { color: #ccc; }
-    #refresh-info { font-size: 0.75rem; color: #555; margin-top: 1.5rem; }
 
-    #ram-card {
-      background: #1a1a1a;
-      border: 1px solid #2a2a2a;
-      border-radius: 10px;
-      padding: 1.2rem 1.5rem;
-      margin-bottom: 1rem;
-      max-width: 520px;
-    }
-    #ram-header {
+    /* batterie */
+    #battery-card .batt-row {
       display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      margin-bottom: 0.8rem;
+      align-items: center;
+      gap: 1rem;
     }
-    #ram-title { font-size: 0.95rem; color: #fff; font-weight: 600; }
-    #ram-stats { font-size: 0.82rem; color: #888; }
-    #ram-stats span { color: #ccc; }
-    #ram-chart-wrap { position: relative; height: 100px; }
+    .batt-icon { font-size: 1.6rem; }
+    .batt-info { font-size: 0.85rem; color: #888; }
+    .batt-info strong { color: #fff; font-size: 1.1rem; }
+
+    #refresh-info { font-size: 0.75rem; color: #444; margin-top: 2rem; }
   </style>
 </head>
 <body>
   <h1>syswatch</h1>
 
-  <h2>RAM</h2>
-  <div id="ram-card">
-    <div id="ram-header">
-      <div id="ram-title">Mémoire vive</div>
-      <div id="ram-stats">— Go utilisés sur — Go</div>
+  <h2>CPU</h2>
+  <div class="card" id="cpu-card">
+    <div class="card-header">
+      <div class="card-title">Processeur</div>
+      <div class="card-sub" id="cpu-sub">—</div>
     </div>
-    <div id="ram-chart-wrap">
-      <canvas id="ram-chart"></canvas>
+    <div class="chart-wrap"><canvas id="cpu-chart"></canvas></div>
+  </div>
+
+  <h2>RAM</h2>
+  <div class="card" id="ram-card">
+    <div class="card-header">
+      <div class="card-title">Mémoire vive</div>
+      <div class="card-sub" id="ram-sub">—</div>
+    </div>
+    <div class="chart-wrap"><canvas id="ram-chart"></canvas></div>
+  </div>
+
+  <h2>Réseau</h2>
+  <div class="card" id="net-card">
+    <div class="card-header">
+      <div class="card-title">Débit réseau</div>
+      <div class="card-sub" id="net-sub">—</div>
+    </div>
+    <div class="chart-wrap"><canvas id="net-chart"></canvas></div>
+  </div>
+
+  <h2>Batterie</h2>
+  <div class="card" id="battery-card">
+    <div class="batt-row">
+      <div class="batt-icon" id="batt-icon">🔋</div>
+      <div class="batt-info" id="batt-info">—</div>
     </div>
   </div>
 
@@ -86,88 +119,168 @@
 
     function fmt(bytes) {
       const gb = bytes / 1e9;
-      return gb >= 1 ? gb.toFixed(1) + " Go" : (bytes / 1e6).toFixed(0) + " Mo";
+      if (gb >= 1) return gb.toFixed(1) + " Go";
+      const mb = bytes / 1e6;
+      if (mb >= 1) return mb.toFixed(1) + " Mo";
+      return (bytes / 1e3).toFixed(0) + " Ko";
     }
 
-    function card(title, subtitle, pct, stats) {
+    function fmtSpeed(bps) {
+      if (bps >= 1e6) return (bps / 1e6).toFixed(1) + " Mo/s";
+      if (bps >= 1e3) return (bps / 1e3).toFixed(0) + " Ko/s";
+      return bps.toFixed(0) + " o/s";
+    }
+
+    function fmtTime(secs) {
+      if (secs <= 0) return null;
+      const h = Math.floor(secs / 3600);
+      const m = Math.floor((secs % 3600) / 60);
+      return h > 0 ? `${h}h${String(m).padStart(2,"0")}` : `${m} min`;
+    }
+
+    function makeChart(id, color, color2 = null) {
+      const datasets = [{
+        data: [],
+        borderColor: color,
+        backgroundColor: color + "22",
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.4,
+      }];
+      if (color2) datasets.push({
+        data: [],
+        borderColor: color2,
+        backgroundColor: color2 + "22",
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.4,
+      });
+
+      return new Chart(document.getElementById(id), {
+        type: "line",
+        data: { labels: [], datasets },
+        options: {
+          animation: false,
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: !!color2, labels: { color: "#666", boxWidth: 12, font: { size: 11 } } },
+            tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y.toFixed(1)}${id === "net-chart" ? "" : " %"}` } }
+          },
+          scales: {
+            x: { display: false },
+            y: {
+              min: 0,
+              grid: { color: "#1e1e1e" },
+              ticks: { color: "#444", font: { size: 10 } },
+            }
+          }
+        }
+      });
+    }
+
+    function pushPoint(chart, value, label, maxY = 100) {
+      chart.data.labels.push(label);
+      chart.data.datasets[0].data.push(value);
+      if (chart.data.labels.length > MAX_POINTS) {
+        chart.data.labels.shift();
+        chart.data.datasets[0].data.shift();
+      }
+      chart.options.scales.y.max = maxY;
+      chart.update();
+    }
+
+    function pushNetPoint(chart, recv, sent, label) {
+      chart.data.labels.push(label);
+      chart.data.datasets[0].data.push(recv / 1e3); // Ko/s
+      chart.data.datasets[1].data.push(sent / 1e3);
+      if (chart.data.labels.length > MAX_POINTS) {
+        chart.data.labels.shift();
+        chart.data.datasets[0].data.shift();
+        chart.data.datasets[1].data.shift();
+      }
+      chart.update();
+    }
+
+    const cpuChart = makeChart("cpu-chart", "#4f8ef7");
+    const ramChart = makeChart("ram-chart", "#a78bfa");
+    const netChart = makeChart("net-chart", "#34d399", "#f97316");
+    netChart.data.datasets[0].label = "↓ Reçu";
+    netChart.data.datasets[1].label = "↑ Envoyé";
+
+    function diskCard(d) {
+      const pct = Math.round((d.used / d.total) * 100);
       const warn = pct > 80;
       return `
         <div class="card">
-          <div class="card-title"><span>${title}</span>${subtitle ? ` &mdash; ${subtitle}` : ""}</div>
+          <div class="card-header">
+            <div class="card-title">${d.label}</div>
+            <div class="card-sub">${d.mount}</div>
+          </div>
           <div class="bar-track">
             <div class="bar-fill ${warn ? "warning" : ""}" style="width:${pct}%"></div>
           </div>
-          <div class="stats">${stats.map(([k, v]) => `<div>${k} : <span>${v}</span></div>`).join("")}<div><span>${pct}%</span></div></div>
+          <div class="stats">
+            <div>Utilisé : <span>${fmt(d.used)}</span></div>
+            <div>Libre : <span>${fmt(d.free)}</span></div>
+            <div>Total : <span>${fmt(d.total)}</span></div>
+            <div><span>${pct}%</span></div>
+          </div>
         </div>`;
     }
 
-    // --- Graphe RAM ---
-    const ramChart = new Chart(document.getElementById("ram-chart"), {
-      type: "line",
-      data: {
-        labels: [],
-        datasets: [{
-          data: [],
-          borderColor: "#a78bfa",
-          backgroundColor: "rgba(167,139,250,0.1)",
-          borderWidth: 2,
-          pointRadius: 0,
-          fill: true,
-          tension: 0.4,
-        }]
-      },
-      options: {
-        animation: false,
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: {
-          callbacks: { label: ctx => ` ${ctx.parsed.y.toFixed(1)} %` }
-        }},
-        scales: {
-          x: { display: false },
-          y: {
-            min: 0, max: 100,
-            grid: { color: "#222" },
-            ticks: { color: "#555", callback: v => v + "%" },
-          }
-        }
-      }
-    });
-
-    function pushRamPoint(pct) {
-      const now = new Date().toLocaleTimeString("fr-FR");
-      ramChart.data.labels.push(now);
-      ramChart.data.datasets[0].data.push(pct);
-      if (ramChart.data.labels.length > MAX_POINTS) {
-        ramChart.data.labels.shift();
-        ramChart.data.datasets[0].data.shift();
-      }
-      // couleur selon charge
-      const color = pct > 80 ? "#f75f5f" : "#a78bfa";
-      ramChart.data.datasets[0].borderColor = color;
-      ramChart.data.datasets[0].backgroundColor = color.replace(")", ",0.1)").replace("rgb", "rgba");
-      ramChart.update();
-    }
-
     async function refresh() {
+      const now = new Date().toLocaleTimeString("fr-FR");
       try {
-        const [ramRes, disksRes] = await Promise.all([fetch("/api/ram"), fetch("/api/disks")]);
-        const ram = await ramRes.json();
+        const [cpuRes, ramRes, netRes, battRes, disksRes] = await Promise.all([
+          fetch("/api/cpu"), fetch("/api/ram"), fetch("/api/network"),
+          fetch("/api/battery"), fetch("/api/disks"),
+        ]);
+        const cpu   = await cpuRes.json();
+        const ram   = await ramRes.json();
+        const net   = await netRes.json();
+        const batt  = await battRes.json();
         const disks = await disksRes.json();
 
-        pushRamPoint(ram.percent);
-        document.getElementById("ram-stats").innerHTML =
-          `<span>${fmt(ram.used)}</span> utilisés &mdash; <span>${fmt(ram.available)}</span> libres &mdash; total <span>${fmt(ram.total)}</span>`;
+        // CPU
+        const cpuColor = cpu.percent > 80 ? "#f75f5f" : "#4f8ef7";
+        cpuChart.data.datasets[0].borderColor = cpuColor;
+        cpuChart.data.datasets[0].backgroundColor = cpuColor + "22";
+        pushPoint(cpuChart, cpu.percent, now);
+        document.getElementById("cpu-sub").innerHTML = `<span>${cpu.percent.toFixed(1)}%</span>`;
 
-        document.getElementById("disks").innerHTML = disks.map(d => {
-          const pct = Math.round((d.used / d.total) * 100);
-          return card(d.label, d.mount, pct,
-            [["Utilisé", fmt(d.used)], ["Libre", fmt(d.free)], ["Total", fmt(d.total)]]
-          );
-        }).join("");
+        // RAM
+        const ramColor = ram.percent > 80 ? "#f75f5f" : "#a78bfa";
+        ramChart.data.datasets[0].borderColor = ramColor;
+        ramChart.data.datasets[0].backgroundColor = ramColor + "22";
+        pushPoint(ramChart, ram.percent, now);
+        document.getElementById("ram-sub").innerHTML =
+          `<span>${fmt(ram.used)}</span> / <span>${fmt(ram.total)}</span>`;
+
+        // Réseau
+        pushNetPoint(netChart, net.bytes_recv_per_sec, net.bytes_sent_per_sec, now);
+        document.getElementById("net-sub").innerHTML =
+          `↓ <span>${fmtSpeed(net.bytes_recv_per_sec)}</span> &nbsp; ↑ <span>${fmtSpeed(net.bytes_sent_per_sec)}</span>`;
+
+        // Batterie
+        if (batt) {
+          const icon = batt.plugged ? "⚡" : batt.percent > 20 ? "🔋" : "🪫";
+          const timeStr = !batt.plugged && batt.secs_left > 0 ? ` — ${fmtTime(batt.secs_left)} restantes` : "";
+          const status = batt.plugged ? "En charge" : "Sur batterie";
+          document.getElementById("batt-icon").textContent = icon;
+          document.getElementById("batt-info").innerHTML =
+            `<strong>${batt.percent.toFixed(0)}%</strong><br>${status}${timeStr}`;
+        } else {
+          document.getElementById("battery-card").innerHTML = `<div class="card-sub">Non disponible (secteur)</div>`;
+        }
+
+        // Disques
+        document.getElementById("disks").innerHTML = disks.map(diskCard).join("");
 
       } catch (e) {
-        document.getElementById("ram-card").innerHTML = "<p style='color:#f75f5f'>Impossible de contacter le serveur.</p>";
+        console.error(e);
       }
     }
 
