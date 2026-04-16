@@ -56,13 +56,14 @@ def _fetch_plan_usage():
             dimensions=(50, 220),
         )
 
-        # Gérer le prompt "trust this folder" s'il apparaît, puis attendre le prompt
-        idx = child.expect(['trust this folder', r'❯', r'> ', pexpect.TIMEOUT], timeout=15)
-        if idx == 0:
-            # Confirmer la confiance du dossier
+        # Attendre le rendu initial (trust prompt ou prompt principal)
+        child.expect(pexpect.TIMEOUT, timeout=8)
+        initial = _RE_ANSI.sub('', child.before or '').replace('\r', '').replace('\x00', '').lower()
+
+        # Si le prompt de confiance est là, envoyer "1" pour confirmer
+        if 'trust' in initial or 'yes' in initial:
             child.sendline('1')
-            child.expect([r'❯', r'> ', pexpect.TIMEOUT], timeout=10)
-        time.sleep(0.3)
+            child.expect(pexpect.TIMEOUT, timeout=6)
 
         child.sendline('/usage')
 
