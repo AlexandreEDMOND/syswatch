@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # /// script
-# dependencies = ["psutil"]
+# dependencies = ["psutil", "pexpect"]
 # ///
 """syswatch - simple local system monitor"""
 
@@ -12,6 +12,7 @@ import subprocess
 import threading
 import time
 import psutil
+import pexpect
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # --- état réseau pour calculer le débit ---
@@ -22,6 +23,92 @@ _net_prev_time = None
 _power_data = {"cpu_mw": 0, "gpu_mw": 0, "ane_mw": 0, "combined_mw": 0, "available": False}
 _power_lock = threading.Lock()
 
+# --- plan usage via claude /usage ---
+_plan_data = {"available": False}
+_plan_lock = threading.Lock()
+
+_RE_ANSI    = re.compile(r'\x1b(?:[@-Z\\-_]|\[[0-9;?]*[ -/]*[@-~])')
+_RE_PCT     = re.compile(r'(\d+)%\s+used')
+_RE_RESETS  = re.compile(r'Resets\s+(.+)')
+_RE_SPENT   = re.compile(r'\$([0-9.]+)\s*/\s*\$([0-9.]+)\s+spent')
+
+
+def _fetch_plan_usage():
+    child = None
+    try:
+        child = pexpect.spawn(
+            'claude',
+            args=['--dangerously-skip-permissions'],
+            timeout=20,
+            encoding='utf-8',
+            echo=False,
+            dimensions=(50, 220),
+        )
+
+        # Attendre que Claude soit prêt (prompt interactif)
+        child.expect([r'❯', r'> ', r'\$', pexpect.TIMEOUT], timeout=15)
+        time.sleep(0.3)
+
+        child.sendline('/usage')
+
+        # Attendre la fin du bloc usage (dernière ligne significative)
+        child.expect(['spent', pexpect.TIMEOUT], timeout=10)
+        time.sleep(0.5)
+        output = child.before + (child.after or '')
+
+        # Nettoyer les codes ANSI et caractères de contrôle
+        clean = _RE_ANSI.sub('', output)
+        clean = clean.replace('\r', '').replace('\x00', '')
+
+        pcts    = _RE_PCT.findall(clean)
+        resets  = _RE_RESETS.findall(clean)
+        spent_m = _RE_SPENT.search(clean)
+
+        result = {
+            'available':      True,
+            'session_pct':    int(pcts[0])         if len(pcts) > 0    else 0,
+            'week_pct':       int(pcts[1])          if len(pcts) > 1   else 0,
+            'extra_pct':      int(pcts[2])          if len(pcts) > 2   else 0,
+            'session_resets': resets[0].strip()     if len(resets) > 0 else '',
+            'week_resets':    resets[1].strip()     if len(resets) > 1 else '',
+            'extra_resets':   resets[2].strip()     if len(resets) > 2 else '',
+            'spent':          float(spent_m.group(1)) if spent_m       else 0.0,
+            'budget':         float(spent_m.group(2)) if spent_m       else 0.0,
+        }
+
+        with _plan_lock:
+            _plan_data.clear()
+            _plan_data.update(result)
+
+    except Exception as e:
+        with _plan_lock:
+            _plan_data['available'] = False
+            _plan_data['error'] = str(e)
+    finally:
+        if child:
+            try:
+                child.close(force=True)
+            except Exception:
+                pass
+
+
+def _plan_usage_worker():
+    while True:
+        _fetch_plan_usage()
+        time.sleep(60)
+
+
+def start_plan_usage_monitor():
+    t = threading.Thread(target=_plan_usage_worker, daemon=True)
+    t.start()
+
+
+def get_plan_usage():
+    with _plan_lock:
+        return dict(_plan_data)
+
+
+# --- powermetrics (power consumption) ---
 _RE_CPU     = re.compile(r'CPU Power:\s+(\d+)\s+mW')
 _RE_GPU     = re.compile(r'GPU Power:\s+(\d+)\s+mW')
 _RE_ANE     = re.compile(r'ANE Power:\s+(\d+)\s+mW')
@@ -265,6 +352,8 @@ class Handler(BaseHTTPRequestHandler):
             json_response(self, get_claude_usage())
         elif self.path == "/api/power":
             json_response(self, get_power_usage())
+        elif self.path == "/api/plan":
+            json_response(self, get_plan_usage())
         elif self.path == "/" or self.path == "/index.html":
             with open("index.html", "rb") as f:
                 content = f.read()
@@ -281,6 +370,7 @@ if __name__ == "__main__":
     psutil.cpu_percent(interval=None)
     get_network_usage()
     start_powermetrics()
+    start_plan_usage_monitor()
 
     port = 8080
     server = HTTPServer(("localhost", port), Handler)

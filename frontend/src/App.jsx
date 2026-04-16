@@ -13,6 +13,7 @@ export default function App() {
   const [disks, setDisks]         = useState([])
   const [battery, setBattery]     = useState(null)
   const [claudeSessions, setClaudeSessions] = useState([])
+  const [plan, setPlan]                     = useState(null)
   const [power, setPower]                   = useState(null)
   const [cpuVal, setCpuVal]   = useState('—')
   const [ramVal, setRamVal]   = useState({ pct: '—', detail: '' })
@@ -58,7 +59,7 @@ export default function App() {
     async function refresh() {
       const now = new Date().toLocaleTimeString('fr-FR')
       try {
-        const [cpu, ram, net, batt, disksData, claudeData, powerData] = await Promise.all([
+        const [cpu, ram, net, batt, disksData, claudeData, powerData, planData] = await Promise.all([
           fetch('/api/cpu').then(r => r.json()),
           fetch('/api/ram').then(r => r.json()),
           fetch('/api/network').then(r => r.json()),
@@ -66,6 +67,7 @@ export default function App() {
           fetch('/api/disks').then(r => r.json()),
           fetch('/api/claude').then(r => r.json()),
           fetch('/api/power').then(r => r.json()),
+          fetch('/api/plan').then(r => r.json()),
         ])
 
         // CPU
@@ -105,6 +107,7 @@ export default function App() {
         setBattery(batt)
         setDisks(disksData.filter(d => DISK_WHITELIST.includes(d.label)))
         setClaudeSessions(claudeData)
+        setPlan(planData)
         setPower(powerData)
       } catch (e) {
         console.error(e)
@@ -234,7 +237,7 @@ export default function App() {
         {/* Claude Code usage */}
         <div className="panel panel-claude">
           <div className="panel-label-sm">CLAUDE CODE</div>
-          <ClaudeCard sessions={claudeSessions} />
+          <ClaudeCard sessions={claudeSessions} plan={plan} />
         </div>
 
         {/* Power consumption */}
