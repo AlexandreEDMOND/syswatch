@@ -3,6 +3,13 @@ function fmtW(mw) {
   return `${mw} mW`
 }
 
+const THERMAL_LEVELS = {
+  Nominal:  { color: 'var(--accent)',  label: 'NOMINAL' },
+  Moderate: { color: 'var(--yellow)',  label: 'MODERATE' },
+  Heavy:    { color: 'var(--orange)',  label: 'HEAVY' },
+  Tripping: { color: 'var(--red)',     label: 'THROTTLING' },
+}
+
 // Heuristique : M5 Air TDP ≈ 15 W max sous charge
 const MAX_MW = 15000
 
@@ -16,19 +23,22 @@ export default function PowerCard({ data }) {
   }
 
   const bars = [
-    { label: 'CPU',      mw: data.cpu_mw,      color: 'var(--accent)' },
-    { label: 'GPU',      mw: data.gpu_mw,      color: 'var(--blue)' },
-    { label: 'ANE',      mw: data.ane_mw,      color: 'var(--yellow)' },
+    { label: 'CPU', mw: data.cpu_mw, color: 'var(--accent)' },
+    { label: 'GPU', mw: data.gpu_mw, color: 'var(--blue)'   },
+    { label: 'ANE', mw: data.ane_mw, color: 'var(--yellow)' },
   ]
 
   const combinedW = (data.combined_mw / 1000).toFixed(2)
-  const combinedPct = Math.min(100, Math.round(data.combined_mw / MAX_MW * 100))
+  const thermal = THERMAL_LEVELS[data.thermal_pressure] ?? THERMAL_LEVELS.Nominal
 
   return (
     <div className="power-card">
       <div className="power-total">
         <span className="power-total-val">{combinedW}<span className="unit"> W</span></span>
         <span className="power-total-label">TOTAL</span>
+        <span className="power-thermal" style={{ color: thermal.color }}>
+          {thermal.label}
+        </span>
       </div>
 
       <div className="power-bars">

@@ -8,14 +8,14 @@ import {
 
 Chart.register(LineElement, PointElement, LineController, CategoryScale, LinearScale, Filler, Tooltip, Legend)
 
-export default function ChartCard({ chartRef, id, color, color2, label1, label2, yMax }) {
+export default function ChartCard({ chartRef, id, color, color2, label1, label2, yMax, initialData, tooltipSuffix }) {
   useEffect(() => {
     const canvas = document.getElementById(`chart-${id}`)
     if (!canvas || chartRef.current) return
 
     const datasets = [{
       label: label1 ?? id,
-      data: [],
+      data: initialData?.datasets?.[0] ?? [],
       borderColor: color,
       backgroundColor: color + '12',
       borderWidth: 1.5,
@@ -27,7 +27,7 @@ export default function ChartCard({ chartRef, id, color, color2, label1, label2,
     if (color2) {
       datasets.push({
         label: label2 ?? '',
-        data: [],
+        data: initialData?.datasets?.[1] ?? [],
         borderColor: color2,
         backgroundColor: color2 + '12',
         borderWidth: 1.5,
@@ -39,7 +39,7 @@ export default function ChartCard({ chartRef, id, color, color2, label1, label2,
 
     chartRef.current = new Chart(canvas, {
       type: 'line',
-      data: { labels: [], datasets },
+      data: { labels: initialData?.labels ?? [], datasets },
       options: {
         animation: false,
         responsive: true,
@@ -65,7 +65,7 @@ export default function ChartCard({ chartRef, id, color, color2, label1, label2,
             bodyColor: '#00ff6e',
             padding: 6,
             callbacks: {
-              label: ctx => ` ${ctx.parsed.y.toFixed(1)}${color2 ? ' KB/s' : '%'}`,
+              label: ctx => ` ${ctx.parsed.y.toFixed(1)}${tooltipSuffix ?? (color2 ? ' KB/s' : '%')}`,
             },
           },
         },
@@ -90,7 +90,7 @@ export default function ChartCard({ chartRef, id, color, color2, label1, label2,
       chartRef.current?.destroy()
       chartRef.current = null
     }
-  }, [])
+  }, [chartRef, color, color2, id, initialData, label1, label2, tooltipSuffix, yMax])
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>

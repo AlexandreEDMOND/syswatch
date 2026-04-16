@@ -13,7 +13,7 @@ Dashboard de monitoring système en temps réel pour macOS (Apple Silicon), avec
 | **Network** | Débit entrant (RX) et sortant (TX) en temps réel |
 | **Battery** | Pourcentage, statut (en charge / sur batterie), temps restant |
 | **Storage** | Macintosh HD et T7 — espace utilisé / libre / total |
-| **Power** | Consommation CPU, GPU et ANE en mW/W via `powermetrics` |
+| **Power** | Consommation CPU/GPU/ANE via `powermetrics` + signaux thermiques et batterie détaillés via `ioreg` |
 | **Claude Code** | Tokens de la session (input / output / cache) + **barres de plan** (session %, semaine %, extra usage) récupérées en direct depuis le CLI Claude Code |
 
 ## Stack
@@ -60,8 +60,132 @@ GET /api/cpu        → { percent, per_core[] }
 GET /api/ram        → { total, used, available, percent }
 GET /api/network    → { bytes_sent_per_sec, bytes_recv_per_sec }
 GET /api/battery    → { percent, plugged, secs_left }
+GET /api/battery-details → { temperature_raw, temperature_c, battery_power_mw, voltage_mv, ... }
 GET /api/disks      → [{ label, mount, total, used, free }]
-GET /api/power      → { cpu_mw, gpu_mw, ane_mw, combined_mw, available }
+GET /api/power      → { cpu_mw, gpu_mw, ane_mw, combined_mw, thermal_pressure, available }
 GET /api/claude     → [{ sessionId, cwd, model, input_tokens, output_tokens, ... }]
 GET /api/plan       → { session_pct, week_pct, extra_pct, session_resets, week_resets, spent, budget }
 ```
+
+## Comment les donnees sont recuperees
+
+### CPU
+
+- source: `psutil.cpu_percent()`
+- usage:
+  - charge CPU globale
+  - charge par coeur disponible dans l'API
+
+### Memory
+
+- source: `psutil.virtual_memory()`
+- usage:
+  - total RAM
+  - RAM utilisee
+  - RAM disponible
+  - pourcentage d'utilisation
+
+### Network
+
+- source: `psutil.net_io_counters()`
+- methode:
+  - le backend garde le sample precedent en memoire
+  - calcule `bytes_sent_per_sec` et `bytes_recv_per_sec` par difference entre deux lectures
+
+### Battery
+
+- source simple: `psutil.sensors_battery()`
+- source detaillee: `ioreg -r -n AppleSmartBattery`
+- usage:
+  - pourcentage
+  - etat charge / decharge
+  - temps restant
+  - temperature batterie brute et interpretee
+  - voltage
+  - amperage
+  - puissance batterie
+  - cycle count
+  - capacities batterie
+
+### Storage
+
+- source:
+  - `shutil.disk_usage("/")`
+  - lecture des volumes montes dans `/Volumes`
+- usage:
+  - espace total / utilise / libre
+  - affichage des disques montes utiles
+
+### Power / Thermal
+
+- source principale: `powermetrics`
+- commande utilisee:
+
+```sh
+powermetrics --samplers cpu_power,gpu_power,ane_power,thermal -i 2000 -n -1 --format text --buffer-size 0
+```
+
+- usage:
+  - puissance CPU
+  - puissance GPU
+  - puissance ANE
+  - puissance combinee
+  - pression thermique qualitative `Nominal / Moderate / Heavy / Tripping`
+
+Important:
+
+- sur ce M5, `powermetrics` ne retourne pas de temperature CPU/GPU en degres de facon exploitable
+- la page `Power detail` utilise donc aussi `ioreg` pour enrichir la lecture thermique via la batterie
+
+### Claude Code
+
+- sessions actives:
+  - source: `~/.claude/sessions/*.json`
+- tokens:
+  - source: `~/.claude/projects/<project>/<session>.jsonl`
+  - lecture des champs `usage` dans les messages assistant
+- plan usage:
+  - source: CLI `claude`
+  - methode:
+    - lancement d'un process `claude --dangerously-skip-permissions` via `pexpect`
+    - envoi de la commande `/usage`
+    - parsing de la sortie terminal
+    - refresh toutes les 60 secondes
+
+## Pages detail
+
+Une navigation par panel existe maintenant.
+
+- `Power detail` est implemente et affiche:
+  - pression thermique qualitative
+  - historique de puissance combinee
+  - temperature batterie issue de `ioreg`
+  - puissance batterie, courant, voltage, cycles et health proxy
+- les autres pages detail restent a construire
+
+## Roadmap / Ce qu'il reste à faire
+
+### Températures composants
+Sur Mac17,3 (M5 Air), ni `cpu_power`, ni `smc`, ni `thermal` ne retournent de températures en degrés.
+Le sampler `thermal` fournit uniquement un niveau qualitatif (`Nominal / Moderate / Heavy / Tripping`) — c'est ce qui est affiché dans le panel Power.
+Si Apple déverrouille l'accès aux températures de die sur une prochaine version de macOS, ajouter les regex correspondantes dans `_powermetrics_worker()` et afficher dans `PowerCard`.
+
+### Pages détail par catégorie
+Navigation overview → page dédiée par panel avec plus de métriques :
+
+| Page | Contenu prévu |
+|------|---------------|
+| **CPU detail** | Utilisation par cœur (E-cluster / S-cluster), fréquences, historique long |
+| **Memory detail** | Répartition wired / active / inactive / compressed, swap |
+| **Network detail** | Stats par interface, top connexions |
+| **Battery detail** | Historique cycles, santé batterie, courbe de charge |
+| **Storage detail** | Disques supplémentaires, vitesse lecture/écriture I/O |
+| **Power detail** | Deja en place partiellement: pression thermique, conso combinee, signaux batterie `ioreg`. Reste: frequences/residencies CPU-GPU, temperature composants si Apple les expose, fan speed si disponible |
+| **Claude Code detail** | Historique sessions, coût cumulé, tokens par projet |
+
+Implémentation : router simple par état React (pas de dépendance externe), clic sur un panel → page détail, bouton retour.
+
+### UI / Layout
+- La colonne 3 row 3 (ex-emplacement réseau) est actuellement vide — à combler (météo ? uptime ? infos système ?)
+- Continuer à améliorer l’interface des pages détail, surtout la page Power qui est fonctionnelle mais encore perfectible visuellement
+- Harmoniser le design entre overview et pages détail
