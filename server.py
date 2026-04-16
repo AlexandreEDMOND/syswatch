@@ -62,10 +62,10 @@ def _fetch_plan_usage():
 
         # Si le prompt de confiance est là, envoyer "1" pour confirmer
         if 'trust' in initial or 'yes' in initial:
-            child.sendline('1')
+            child.send('1\r')
             child.expect(pexpect.TIMEOUT, timeout=6)
 
-        child.sendline('/usage')
+        child.send('/usage\r')
 
         # Laisser le temps à claude de rendre tout le bloc /usage
         try:
