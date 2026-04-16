@@ -120,7 +120,7 @@ export default function CpuDetail({ cpu, cpuSeries, loadSeries, clusterFreqSerie
               <ChartCard
                 chartRef={usageRef}
                 id="cpu-detail-usage"
-                color="#00ff6e"
+                color="--accent"
                 yMax={100}
                 initialData={createSingleSeries(cpuSeries)}
               />
@@ -138,8 +138,8 @@ export default function CpuDetail({ cpu, cpuSeries, loadSeries, clusterFreqSerie
               <ChartCard
                 chartRef={loadRef}
                 id="cpu-detail-load"
-                color="#00d9ff"
-                color2="#ffd600"
+                color="--blue"
+                color2="--yellow"
                 label1="1m"
                 label2="15m"
                 initialData={createDualSeries(loadSeries)}
@@ -157,8 +157,8 @@ export default function CpuDetail({ cpu, cpuSeries, loadSeries, clusterFreqSerie
               <ChartCard
                 chartRef={freqRef}
                 id="cpu-detail-freq"
-                color="#ff7a00"
-                color2="#00ff6e"
+                color="--orange"
+                color2="--accent"
                 label1="Primary"
                 label2="Secondary"
                 yMax={4500}
@@ -178,7 +178,7 @@ export default function CpuDetail({ cpu, cpuSeries, loadSeries, clusterFreqSerie
                 chartRef={residencyRef}
                 id="cpu-detail-residency"
                 color="#00ff6e"
-                color2="#ff2040"
+                color2="--red"
                 label1="Primary active"
                 label2="Secondary active"
                 yMax={100}

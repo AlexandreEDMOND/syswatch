@@ -37,7 +37,18 @@ function createDualValueSeries() {
   return { labels: [], valuesA: [], valuesB: [] }
 }
 
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+}
+
+function initTheme() {
+  const saved = localStorage.getItem('sw-theme') ?? 'dark'
+  document.documentElement.dataset.theme = saved === 'light' ? 'light' : ''
+  return saved === 'light' ? 'light' : 'dark'
+}
+
 export default function App() {
+  const [theme, setTheme] = useState(() => initTheme())
   const [route, setRoute] = useState(() => getRoute())
   const [disks, setDisks]         = useState([])
   const [battery, setBattery]     = useState(null)
@@ -136,6 +147,13 @@ export default function App() {
     if (series.valuesB.length > MAX_POINTS) series.valuesB.shift()
   }
 
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark'
+    document.documentElement.dataset.theme = next === 'light' ? 'light' : ''
+    localStorage.setItem('sw-theme', next)
+    setTheme(next)
+  }
+
   function goBackToOverview() {
     if (window.location.pathname !== '/') {
       window.history.pushState({}, '', '/')
@@ -175,7 +193,7 @@ export default function App() {
         ])
 
         // CPU
-        const cpuColor = cpu.percent > 80 ? '#ff2040' : '#00ff6e'
+        const cpuColor = cpu.percent > 80 ? cssVar('--red') : cssVar('--accent')
         if (cpuRef.current) {
           cpuRef.current.data.datasets[0].borderColor = cpuColor
           cpuRef.current.data.datasets[0].backgroundColor = cpuColor + '15'
@@ -201,7 +219,7 @@ export default function App() {
         )
 
         // RAM
-        const ramColor = ram.percent > 80 ? '#ff2040' : '#00d9ff'
+        const ramColor = ram.percent > 80 ? cssVar('--red') : cssVar('--blue')
         if (ramRef.current) {
           ramRef.current.data.datasets[0].borderColor = ramColor
           ramRef.current.data.datasets[0].backgroundColor = ramColor + '15'
@@ -344,6 +362,9 @@ export default function App() {
         </div>
 
         <div className="header-right">
+          <button type="button" className="theme-toggle" onClick={toggleTheme} title="Basculer le thème">
+            {theme === 'dark' ? '◐' : '◑'}
+          </button>
           <span className="clock">{clockStr}</span>
           <span className="date">{dateStr}</span>
         </div>
@@ -366,7 +387,7 @@ export default function App() {
             <ChartCard
               chartRef={cpuRef}
               id="cpu"
-              color="#00ff6e"
+              color="--accent"
               yMax={100}
               initialData={cpuSeriesRef.current}
             />
@@ -388,7 +409,7 @@ export default function App() {
             <ChartCard
               chartRef={ramRef}
               id="ram"
-              color="#00d9ff"
+              color="--blue"
               yMax={100}
               initialData={ramSeriesRef.current}
             />
@@ -408,8 +429,8 @@ export default function App() {
             <ChartCard
               chartRef={netRef}
               id="net"
-              color="#ff7a00"
-              color2="#ffd600"
+              color="--orange"
+              color2="--yellow"
               label1="↓ RX"
               label2="↑ TX"
               initialData={netSeriesRef.current}

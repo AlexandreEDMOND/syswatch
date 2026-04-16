@@ -101,7 +101,7 @@ export default function MemoryDetail({ ram, usageSeries, compressedSeries, swapS
               <ChartCard
                 chartRef={usageRef}
                 id="memory-detail-usage"
-                color="#00d9ff"
+                color="--blue"
                 yMax={100}
                 initialData={usageSeries}
               />
@@ -117,7 +117,7 @@ export default function MemoryDetail({ ram, usageSeries, compressedSeries, swapS
               <ChartCard
                 chartRef={compressedRef}
                 id="memory-detail-compressed"
-                color="#ffd600"
+                color="--yellow"
                 yMax={Math.max(2, Math.ceil((ram?.total ?? 0) / 1e9))}
                 initialData={createSingleSeries(compressedSeries)}
                 tooltipSuffix=" GB"
@@ -134,7 +134,7 @@ export default function MemoryDetail({ ram, usageSeries, compressedSeries, swapS
               <ChartCard
                 chartRef={swapRef}
                 id="memory-detail-swap"
-                color="#ff7a00"
+                color="--orange"
                 yMax={Math.max(2, Math.ceil((ram?.swap_total ?? 0) / 1e9))}
                 initialData={createSingleSeries(swapSeries)}
                 tooltipSuffix=" GB"
@@ -151,7 +151,7 @@ export default function MemoryDetail({ ram, usageSeries, compressedSeries, swapS
               <ChartCard
                 chartRef={pressureRef}
                 id="memory-detail-pressure"
-                color="#00ff6e"
+                color="--accent"
                 yMax={100}
                 initialData={createSingleSeries(pressureSeries)}
               />

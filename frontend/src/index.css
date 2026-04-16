@@ -20,6 +20,55 @@
   --gap: 5px;
   --header-h: 50px;
   --radius: 2px;
+
+  /* Surface washes / accent overlays — retuned per theme */
+  --panel-wash: rgba(0, 255, 110, 0.03);
+  --hover-wash: rgba(0, 255, 110, 0.1);
+  --hover-ring: rgba(0, 255, 110, 0.18);
+  --hover-ring-soft: rgba(0, 255, 110, 0.12);
+  --accent-radial: rgba(0, 255, 110, 0.03);
+  --accent-radial-detail: rgba(0, 255, 110, 0.04);
+  --accent-radial-panel: rgba(0, 255, 110, 0.04);
+  --accent-radial-corner: rgba(0, 255, 110, 0.12);
+  --panel-inset-glow: rgba(0, 255, 110, 0.03);
+
+  /* Effects that light theme disables outright */
+  --logo-glow: 0 0 24px rgba(0, 255, 110, 0.6), 0 0 8px rgba(0, 255, 110, 0.4);
+  --title-glow: 0 0 24px rgba(0, 255, 110, 0.18);
+  --scanline-color: rgba(0, 0, 0, 0.06);
+  --chart-grid: #0a1e10;
+}
+
+:root[data-theme="light"] {
+  --bg: #f4f5f3;
+  --panel: #ffffff;
+  --border: #d9dcd5;
+  --accent: #0a8a3f;
+  --accent-dim: #147a3d;
+  --accent-glow: rgba(10, 138, 63, 0.08);
+  --blue: #0876a8;
+  --blue-dim: #0a6185;
+  --orange: #b85200;
+  --yellow: #8a6d00;
+  --red: #b30821;
+  --text-bright: #1a2621;
+  --text-dim: #8a948e;
+  --text-label: #5d6b62;
+
+  --panel-wash: rgba(10, 138, 63, 0.035);
+  --hover-wash: rgba(10, 138, 63, 0.06);
+  --hover-ring: rgba(10, 138, 63, 0.28);
+  --hover-ring-soft: rgba(10, 138, 63, 0.18);
+  --accent-radial: transparent;
+  --accent-radial-detail: transparent;
+  --accent-radial-panel: transparent;
+  --accent-radial-corner: rgba(10, 138, 63, 0.05);
+  --panel-inset-glow: transparent;
+
+  --logo-glow: none;
+  --title-glow: none;
+  --scanline-color: transparent;
+  --chart-grid: #e8ebe5;
 }
 
 html, body {
@@ -48,8 +97,8 @@ button {
     0deg,
     transparent,
     transparent 3px,
-    rgba(0, 0, 0, 0.06) 3px,
-    rgba(0, 0, 0, 0.06) 4px
+    var(--scanline-color) 3px,
+    var(--scanline-color) 4px
   );
   pointer-events: none;
   z-index: 9999;
@@ -64,7 +113,7 @@ button {
   gap: var(--gap);
   overflow: hidden;
   background:
-    radial-gradient(ellipse 60% 40% at 50% 0%, rgba(0, 255, 110, 0.03) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 40% at 50% 0%, var(--accent-radial) 0%, transparent 70%),
     var(--bg);
 }
 
@@ -104,7 +153,7 @@ button {
   font-size: 1rem;
   letter-spacing: 0.25em;
   color: var(--accent);
-  text-shadow: 0 0 24px rgba(0, 255, 110, 0.6), 0 0 8px rgba(0, 255, 110, 0.4);
+  text-shadow: var(--logo-glow);
 }
 
 .live-dot {
@@ -161,6 +210,22 @@ button {
   gap: 1px;
 }
 
+.theme-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-label);
+  line-height: 1;
+  margin-bottom: 2px;
+  transition: color 0.18s ease;
+}
+
+.theme-toggle:hover {
+  color: var(--accent);
+}
+
 .clock {
   font-size: 1rem;
   letter-spacing: 0.12em;
@@ -208,7 +273,7 @@ button {
 
 .panel-button:hover {
   border-color: var(--accent-dim);
-  box-shadow: inset 0 0 0 1px rgba(0, 255, 110, 0.18);
+  box-shadow: inset 0 0 0 1px var(--hover-ring);
 }
 
 .panel-button:focus-visible {
@@ -397,8 +462,8 @@ button {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  border: 1px solid rgba(13, 36, 22, 0.75);
-  background: rgba(0, 255, 110, 0.03);
+  border: 1px solid var(--border);
+  background: var(--panel-wash);
   padding: 0.55rem 0.65rem;
 }
 
@@ -725,7 +790,7 @@ button {
   padding: var(--gap);
   gap: var(--gap);
   background:
-    radial-gradient(ellipse 60% 40% at 50% 0%, rgba(0, 255, 110, 0.04) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 40% at 50% 0%, var(--accent-radial-detail) 0%, transparent 70%),
     var(--bg);
   color: var(--text-bright);
   display: flex;
@@ -757,7 +822,7 @@ button {
   padding: 0.7rem 1rem;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: rgba(0, 255, 110, 0.06);
+  background: var(--hover-wash);
   color: var(--text-bright);
   cursor: pointer;
   letter-spacing: 0.08em;
@@ -768,8 +833,8 @@ button {
 .detail-back:hover,
 .detail-cta:hover {
   border-color: var(--accent-dim);
-  box-shadow: 0 0 0 1px rgba(0, 255, 110, 0.12);
-  background: rgba(0, 255, 110, 0.1);
+  box-shadow: 0 0 0 1px var(--hover-ring-soft);
+  background: var(--hover-wash);
 }
 
 .detail-shell {
@@ -786,9 +851,9 @@ button {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background:
-    linear-gradient(180deg, rgba(0, 255, 110, 0.04), transparent 28%),
+    linear-gradient(180deg, var(--accent-radial-panel), transparent 28%),
     var(--panel);
-  box-shadow: inset 0 0 0 1px rgba(0, 255, 110, 0.03);
+  box-shadow: inset 0 0 0 1px var(--panel-inset-glow);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -821,7 +886,7 @@ button {
   height: 260px;
   right: -90px;
   bottom: -120px;
-  background: radial-gradient(circle, rgba(0, 255, 110, 0.12) 0%, transparent 68%);
+  background: radial-gradient(circle, var(--accent-radial-corner) 0%, transparent 68%);
 }
 
 .detail-kicker {
@@ -838,7 +903,7 @@ button {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--accent);
-  text-shadow: 0 0 24px rgba(0, 255, 110, 0.18);
+  text-shadow: var(--title-glow);
 }
 
 .detail-copy {
@@ -852,7 +917,7 @@ button {
   padding: 0.85rem 1.2rem;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: rgba(0, 255, 110, 0.06);
+  background: var(--hover-wash);
   color: var(--text-bright);
   cursor: pointer;
   text-transform: uppercase;
@@ -907,7 +972,7 @@ button {
 
 .power-stat-tile {
   border: 1px solid var(--border);
-  background: rgba(0, 255, 110, 0.03);
+  background: var(--panel-wash);
   min-height: 0;
   padding: 0.7rem 0.85rem;
   display: flex;
@@ -989,7 +1054,7 @@ button {
   align-items: baseline;
   gap: 0.75rem;
   padding-bottom: 0.25rem;
-  border-bottom: 1px solid rgba(13, 36, 22, 0.75);
+  border-bottom: 1px solid var(--border);
 }
 
 .power-signal-key {
@@ -1019,7 +1084,7 @@ button {
   grid-column: 1 / -1;
   padding: 0.75rem 0.85rem;
   border: 1px solid var(--border);
-  background: rgba(0, 255, 110, 0.03);
+  background: var(--panel-wash);
   color: var(--text-dim);
   font-size: 0.72rem;
   line-height: 1.5;
@@ -1040,7 +1105,7 @@ button {
   gap: 0.75rem;
   align-items: center;
   padding: 0.3rem 0;
-  border-bottom: 1px solid rgba(13, 36, 22, 0.75);
+  border-bottom: 1px solid var(--border);
   color: var(--text-bright);
 }
 
@@ -1085,7 +1150,7 @@ button {
 
 .claude-roadmap-box {
   border: 1px solid var(--border);
-  background: rgba(0, 255, 110, 0.03);
+  background: var(--panel-wash);
   padding: 0.7rem 0.8rem;
   display: flex;
   justify-content: space-between;

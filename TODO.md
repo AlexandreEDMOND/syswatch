@@ -14,6 +14,7 @@
 - Rendre la page `Power detail` plus lisible et plus coherente visuellement
 - Harmoniser overview, detail pages et composants de cartes
 - Mieux distinguer valeurs brutes, valeurs interpretees et signaux qualitatifs
+- Ajouter des bornes d'affichage au graphe network pour eviter de changer d'echelle a chaque pic
 
 ## Lancement / CLI
 

@@ -130,7 +130,7 @@ export default function PowerDetail({ power, batteryDetails, thermalSeries, comb
               <ChartCard
                 chartRef={combinedRef}
                 id="power-combined"
-                color="#00ff6e"
+                color="--accent"
                 yMax={15000}
                 initialData={createSingleSeries(combinedSeries)}
                 tooltipSuffix=" mW"
@@ -147,7 +147,7 @@ export default function PowerDetail({ power, batteryDetails, thermalSeries, comb
               <ChartCard
                 chartRef={batteryTempRef}
                 id="battery-temp"
-                color="#00d9ff"
+                color="--blue"
                 yMax={60}
                 initialData={createSingleSeries(batteryTempSeries)}
                 tooltipSuffix=" C"
