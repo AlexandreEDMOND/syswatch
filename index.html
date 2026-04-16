@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>syswatch</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f0f0f;
+      color: #e0e0e0;
+      padding: 2rem;
+    }
+    h1 { font-size: 1.4rem; margin-bottom: 1.5rem; color: #fff; letter-spacing: 0.05em; }
+    .card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      padding: 1.2rem 1.5rem;
+      margin-bottom: 1rem;
+      max-width: 520px;
+    }
+    .card-title { font-size: 0.95rem; color: #aaa; margin-bottom: 0.6rem; }
+    .card-title span { color: #fff; font-weight: 600; }
+    .bar-track {
+      background: #2a2a2a;
+      border-radius: 999px;
+      height: 10px;
+      overflow: hidden;
+      margin-bottom: 0.6rem;
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #4f8ef7, #a78bfa);
+      transition: width 0.5s ease;
+    }
+    .bar-fill.warning { background: linear-gradient(90deg, #f7a24f, #f75f5f); }
+    .stats { font-size: 0.82rem; color: #888; display: flex; justify-content: space-between; }
+    .stats span { color: #ccc; }
+    #refresh-info { font-size: 0.75rem; color: #555; margin-top: 1.5rem; }
+  </style>
+</head>
+<body>
+  <h1>syswatch — disques</h1>
+  <div id="disks"></div>
+  <p id="refresh-info">Rafraichissement toutes les 3 secondes</p>
+
+  <script>
+    function fmt(bytes) {
+      const gb = bytes / 1e9;
+      return gb >= 1 ? gb.toFixed(1) + " Go" : (bytes / 1e6).toFixed(0) + " Mo";
+    }
+
+    async function refresh() {
+      try {
+        const res = await fetch("/api/disks");
+        const disks = await res.json();
+        const container = document.getElementById("disks");
+        container.innerHTML = "";
+
+        disks.forEach(d => {
+          const pct = Math.round((d.used / d.total) * 100);
+          const warn = pct > 80;
+          container.innerHTML += `
+            <div class="card">
+              <div class="card-title"><span>${d.label}</span> &mdash; ${d.mount}</div>
+              <div class="bar-track">
+                <div class="bar-fill ${warn ? 'warning' : ''}" style="width:${pct}%"></div>
+              </div>
+              <div class="stats">
+                <div>Utilisé : <span>${fmt(d.used)}</span></div>
+                <div>Libre : <span>${fmt(d.free)}</span></div>
+                <div>Total : <span>${fmt(d.total)}</span></div>
+                <div><span>${pct}%</span></div>
+              </div>
+            </div>`;
+        });
+      } catch (e) {
+        document.getElementById("disks").innerHTML = "<p style='color:#f75f5f'>Impossible de contacter le serveur.</p>";
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 3000);
+  </script>
+</body>
+</html>
