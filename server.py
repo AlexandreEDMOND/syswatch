@@ -56,8 +56,12 @@ def _fetch_plan_usage():
             dimensions=(50, 220),
         )
 
-        # Attendre que Claude soit prêt (prompt interactif)
-        child.expect([r'❯', r'> ', r'\$', pexpect.TIMEOUT], timeout=15)
+        # Gérer le prompt "trust this folder" s'il apparaît, puis attendre le prompt
+        idx = child.expect(['trust this folder', r'❯', r'> ', pexpect.TIMEOUT], timeout=15)
+        if idx == 0:
+            # Confirmer la confiance du dossier
+            child.sendline('1')
+            child.expect([r'❯', r'> ', pexpect.TIMEOUT], timeout=10)
         time.sleep(0.3)
 
         child.sendline('/usage')
