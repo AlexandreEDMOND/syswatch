@@ -63,7 +63,8 @@ def _fetch_plan_usage():
         # Attendre la fin du bloc usage (dernière ligne significative)
         child.expect(['spent', pexpect.TIMEOUT], timeout=10)
         time.sleep(0.5)
-        output = child.before + (child.after or '')
+        after  = child.after if isinstance(child.after, str) else ''
+        output = (child.before or '') + after
 
         # Nettoyer les codes ANSI et caractères de contrôle
         clean = _RE_ANSI.sub('', output)
