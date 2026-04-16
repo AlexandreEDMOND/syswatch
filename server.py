@@ -92,7 +92,6 @@ def _fetch_plan_usage():
             'extra_resets':   resets[2].strip()     if len(resets) > 2 else '',
             'spent':          float(spent_m.group(1)) if spent_m       else 0.0,
             'budget':         float(spent_m.group(2)) if spent_m       else 0.0,
-            '_debug':         repr(clean[:1500]),   # temporaire pour debug
         }
 
         with _plan_lock:
