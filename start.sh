@@ -5,8 +5,11 @@ cd "$(dirname "$0")"
 
 echo "Démarrage de syswatch..."
 
-# API Python en arrière-plan (sudo pour powermetrics)
-sudo uv run server.py &
+# Mise en cache du mot de passe sudo (pour powermetrics)
+sudo -v
+
+# API Python en arrière-plan (-n = utilise les credentials mis en cache)
+sudo -n uv run server.py &
 API_PID=$!
 
 # Frontend Vite (ouvre le navigateur automatiquement)
