@@ -36,9 +36,18 @@ _RE_SPENT   = re.compile(r'\$([0-9.]+)\s*/\s*\$([0-9.]+)\s+spent')
 def _fetch_plan_usage():
     child = None
     try:
+        # Si on tourne en root (sudo), spawner claude en tant qu'user normal
+        sudo_user = os.environ.get('SUDO_USER')
+        if sudo_user and os.geteuid() == 0:
+            cmd  = 'sudo'
+            args = ['-u', sudo_user, '-i', 'claude']
+        else:
+            cmd  = 'claude'
+            args = []
+
         child = pexpect.spawn(
-            'claude',
-            args=['--dangerously-skip-permissions'],
+            cmd,
+            args=args,
             timeout=20,
             encoding='utf-8',
             echo=False,
