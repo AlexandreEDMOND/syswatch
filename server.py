@@ -36,14 +36,16 @@ _RE_SPENT   = re.compile(r'\$([0-9.]+)\s*/\s*\$([0-9.]+)\s+spent')
 def _fetch_plan_usage():
     child = None
     try:
-        # Si on tourne en root (sudo), spawner claude en tant qu'user normal
+        # Si on tourne en root (sudo), spawner claude en tant qu'user normal.
+        # --dangerously-skip-permissions est ok ici car claude tourne en tant
+        # qu'alexandre (pas root), ce qui bypasse le prompt "trust this folder".
         sudo_user = os.environ.get('SUDO_USER')
         if sudo_user and os.geteuid() == 0:
             cmd  = 'sudo'
-            args = ['-u', sudo_user, '-i', 'claude']
+            args = ['-u', sudo_user, '-i', 'claude', '--dangerously-skip-permissions']
         else:
             cmd  = 'claude'
-            args = []
+            args = ['--dangerously-skip-permissions']
 
         child = pexpect.spawn(
             cmd,
