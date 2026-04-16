@@ -31,11 +31,6 @@ function fmtInt(value) {
   return new Intl.NumberFormat('fr-FR').format(value)
 }
 
-function fmtMoney(value) {
-  if (value == null || Number.isNaN(value)) return '—'
-  return `$${value.toFixed(2)}`
-}
-
 function fmtCodexReset(ts) {
   if (!ts) return '—'
   const d = new Date(ts * 1000)
@@ -103,10 +98,6 @@ export default function ClaudeDetail({ sessions, plan, codex, onBack }) {
               <span className="power-stat-label">Output tokens</span>
               <span className="power-stat-value claude-stat-compact">{fmtInt(totals.output)}</span>
             </div>
-            <div className="power-stat-tile">
-              <span className="power-stat-label">Extra spend</span>
-              <span className="power-stat-value">{hasPlan ? fmtMoney(plan.spent) : '—'}</span>
-            </div>
           </div>
         </section>
 
@@ -136,14 +127,6 @@ export default function ClaudeDetail({ sessions, plan, codex, onBack }) {
                 <>
                   <PlanBar label="Session" pct={plan.session_pct} resets={plan.session_resets} color="var(--accent)" />
                   <PlanBar label="Week" pct={plan.week_pct} resets={plan.week_resets} color="var(--blue)" />
-                  {plan.budget > 0 ? (
-                    <>
-                      <PlanBar label="Extra" pct={plan.extra_pct} resets={plan.extra_resets} color="var(--orange)" />
-                      <div className="claude-detail-foot">
-                        {fmtMoney(plan.spent)} / {fmtMoney(plan.budget)} spent
-                      </div>
-                    </>
-                  ) : null}
                 </>
               ) : (
                 <div className="cpu-empty-state">

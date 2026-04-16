@@ -91,19 +91,6 @@ export default function ClaudeCard({ sessions, plan, codex }) {
               resets={plan.week_resets}
               color="var(--blue)"
             />
-            {plan.budget > 0 && (
-              <div className="plan-extra">
-                <PlanBar
-                  label="Extra"
-                  pct={plan.extra_pct}
-                  resets={plan.extra_resets}
-                  color="var(--orange)"
-                />
-                <span className="plan-spent">
-                  ${plan.spent.toFixed(2)} / ${plan.budget.toFixed(2)} spent
-                </span>
-              </div>
-            )}
           </div>
         ) : (
           <div className="plan-loading">

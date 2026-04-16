@@ -18,7 +18,7 @@ Dashboard de monitoring système en temps réel pour macOS (Apple Silicon), avec
 
 ## Stack
 
-- **Backend** : Python 3 (stdlib + `psutil` + `pexpect`), lancé via [`uv`](https://github.com/astral-sh/uv)
+- **Backend** : Python 3 (stdlib + `psutil`), lancé via [`uv`](https://github.com/astral-sh/uv)
 - **Frontend** : React + Vite, Chart.js pour les graphes
 - **Design** : Phosphor terminal — Syncopate + Share Tech Mono, overlay scanlines CRT, grille fixe sans scroll
 
@@ -49,7 +49,22 @@ Le panel utilise deux sources :
 
 **Tokens bruts** — lus directement depuis `~/.claude/projects/<projet>/<session>.jsonl`. Chaque message assistant contient un champ `usage` avec `input_tokens`, `output_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`.
 
-**Barres de plan** — un thread de fond spawne un process `claude --dangerously-skip-permissions` via `pexpect`, envoie la commande `/usage`, capture la sortie terminal, et parse les pourcentages + reset times. Se rafraîchit toutes les 60 secondes.
+**Barres de plan** — priorité à un export structuré du `statusLine` Claude Code vers `~/.claude/syswatch/plan_usage.json`, relu quasi instantanément par le backend. Si ce cache n’existe pas encore, le backend garde un fallback plus lent via `claude /usage`.
+
+### Activer l’export rapide Claude
+
+```bash
+python3 scripts/install-claude-statusline.py
+```
+
+Puis redémarrer Claude Code ou envoyer un nouveau message dans une session Claude ouverte.
+
+Le script installé dans `statusLine` écrit un JSON local avec :
+
+- `rate_limits.five_hour.used_percentage`
+- `rate_limits.five_hour.resets_at`
+- `rate_limits.seven_day.used_percentage`
+- `rate_limits.seven_day.resets_at`
 
 ## API
 
@@ -64,7 +79,7 @@ GET /api/battery-details → { temperature_raw, temperature_c, battery_power_mw,
 GET /api/disks      → [{ label, mount, total, used, free }]
 GET /api/power      → { cpu_mw, gpu_mw, ane_mw, combined_mw, thermal_pressure, available }
 GET /api/claude     → [{ sessionId, cwd, model, input_tokens, output_tokens, ... }]
-GET /api/plan       → { session_pct, week_pct, extra_pct, session_resets, week_resets, spent, budget }
+GET /api/plan       → { session_pct, week_pct, session_resets, week_resets }
 ```
 
 ## Comment les donnees sont recuperees
@@ -145,12 +160,11 @@ Important:
   - source: `~/.claude/projects/<project>/<session>.jsonl`
   - lecture des champs `usage` dans les messages assistant
 - plan usage:
-  - source: CLI `claude`
+  - source principale: `~/.claude/syswatch/plan_usage.json`
   - methode:
-    - lancement d'un process `claude --dangerously-skip-permissions` via `pexpect`
-    - envoi de la commande `/usage`
-    - parsing de la sortie terminal
-    - refresh toutes les 60 secondes
+    - un script `statusLine` Claude Code reçoit les `rate_limits` sur stdin
+    - ecrit un cache JSON local pour `syswatch`
+    - `syswatch` le relit toutes les quelques secondes
 
 ## Pages detail
 

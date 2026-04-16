@@ -556,18 +556,6 @@ button {
   letter-spacing: 0.06em;
 }
 
-.plan-extra {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.plan-spent {
-  font-size: 0.52rem;
-  color: var(--text-label);
-  letter-spacing: 0.04em;
-}
-
 /* Token counts (compact) */
 .claude-tokens {
   display: flex;

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # /// script
-# dependencies = ["psutil", "pexpect"]
+# dependencies = ["psutil"]
 # ///
 """syswatch - simple local system monitor"""
 
@@ -11,8 +11,8 @@ import shutil
 import subprocess
 import threading
 import time
+from datetime import datetime
 import psutil
-import pexpect
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # --- état réseau pour calculer le débit ---
@@ -27,106 +27,119 @@ _power_lock = threading.Lock()
 # --- plan usage via claude /usage ---
 _plan_data = {"available": False}
 _plan_lock = threading.Lock()
+_plan_cache_max_age = 900.0
 
-_RE_ANSI    = re.compile(r'\x1b(?:[@-Z\\-_]|\[[0-9;?]*[ -/]*[@-~])')
-_RE_PCT     = re.compile(r'(\d+)%\s*used')
-_RE_RESETS  = re.compile(r'Resets\s+([^\n(]+\([^)]+\))')
-_RE_SPENT   = re.compile(r'\$([0-9.]+)\s*/\s*\$([0-9.]+)\s+spent')
 _RE_VM_STAT_PAGE_SIZE = re.compile(r'page size of\s+(\d+)\s+bytes')
 _RE_VM_STAT_LINE = re.compile(r'^([^:]+):\s+([0-9.]+)\.?$')
 _RE_MEMORY_PRESSURE = re.compile(r'System-wide memory free percentage:\s+(\d+)%')
 
 
-def _fetch_plan_usage():
-    child = None
-    try:
-        # Si on tourne en root (sudo), spawner claude en tant qu'user normal.
-        # --dangerously-skip-permissions est ok ici car claude tourne en tant
-        # qu'alexandre (pas root), ce qui bypasse le prompt "trust this folder".
-        sudo_user = os.environ.get('SUDO_USER')
-        if sudo_user and os.geteuid() == 0:
-            import pwd
-            pw = pwd.getpwnam(sudo_user)
-            cmd  = 'sudo'
-            args = ['-u', sudo_user, '-H', 'claude', '--dangerously-skip-permissions']
-        else:
-            cmd  = 'claude'
-            args = ['--dangerously-skip-permissions']
-
-        child = pexpect.spawn(
-            cmd,
-            args=args,
-            timeout=20,
-            encoding='utf-8',
-            echo=False,
-            dimensions=(50, 220),
-        )
-
-        # Attendre le rendu initial
-        child.expect(pexpect.TIMEOUT, timeout=8)
-        initial = _RE_ANSI.sub('', child.before or '').replace('\r', '').replace('\x00', '').lower()
-
-        # Naviguer à travers les prompts de first-run (thème, login, trust)
-        # Chaque itération envoie "1" pour accepter le défaut et attend la suite
-        for _ in range(4):
-            if 'trust' in initial or ('yes' in initial and 'no' in initial):
-                child.send('1\r')
-            elif any(kw in initial for kw in ('textstyle', 'darkmode', 'loginmethod', 'subscription', 'consoleaccount', 'getstarted', 'choosethetextstyle')):
-                child.send('1\r')
-            else:
-                break
-            child.expect(pexpect.TIMEOUT, timeout=6)
-            initial = _RE_ANSI.sub('', child.before or '').replace('\r', '').replace('\x00', '').lower()
-
-        child.send('/usage\r')
-
-        # Laisser le temps à claude de rendre tout le bloc /usage
+def _get_real_home():
+    sudo_user = os.environ.get("SUDO_USER")
+    if sudo_user and os.geteuid() == 0:
         try:
-            child.expect(pexpect.TIMEOUT, timeout=6)
+            import pwd
+            return pwd.getpwnam(sudo_user).pw_dir
         except Exception:
             pass
-        output = child.before or ''
+    return os.path.expanduser("~")
 
-        # Nettoyer les codes ANSI et caractères de contrôle
-        clean = _RE_ANSI.sub('', output)
-        clean = clean.replace('\r', '').replace('\x00', '')
 
-        pcts    = _RE_PCT.findall(clean)
-        resets  = _RE_RESETS.findall(clean)
-        spent_m = _RE_SPENT.search(clean)
+def _format_reset_timestamp(raw_ts):
+    if raw_ts in (None, ""):
+        return ""
+    try:
+        dt = datetime.fromtimestamp(float(raw_ts)).astimezone()
+    except Exception:
+        return ""
 
-        result = {
-            'available':      True,
-            'session_pct':    int(pcts[0])         if len(pcts) > 0    else 0,
-            'week_pct':       int(pcts[1])          if len(pcts) > 1   else 0,
-            'extra_pct':      int(pcts[2])          if len(pcts) > 2   else 0,
-            'session_resets': resets[0].strip()     if len(resets) > 0 else '',
-            'week_resets':    resets[1].strip()     if len(resets) > 1 else '',
-            'extra_resets':   resets[2].strip()     if len(resets) > 2 else '',
-            'spent':          float(spent_m.group(1)) if spent_m       else 0.0,
-            'budget':         float(spent_m.group(2)) if spent_m       else 0.0,
-        }
+    now = datetime.now(dt.tzinfo)
+    tz_name = dt.tzname() or "local"
+    if dt.date() == now.date():
+        return f"{dt.strftime('%H:%M')} ({tz_name})"
+    return f"{dt.strftime('%b %d at %H:%M')} ({tz_name})"
 
+
+def _read_statusline_plan_usage():
+    plan_path = os.path.join(_get_real_home(), ".claude", "syswatch", "plan_usage.json")
+    if not os.path.exists(plan_path):
+        return None
+
+    try:
+        stat = os.stat(plan_path)
+        if time.time() - stat.st_mtime > _plan_cache_max_age:
+            return None
+        with open(plan_path, encoding="utf-8") as f:
+            payload = json.load(f)
+    except Exception:
+        return None
+
+    rate_limits = payload.get("rate_limits") or {}
+    five_hour = rate_limits.get("five_hour") or {}
+    seven_day = rate_limits.get("seven_day") or {}
+    if not five_hour and not seven_day:
+        return None
+
+    result = {
+        "available": True,
+        "session_pct": int(round(five_hour.get("used_percentage", 0) or 0)),
+        "week_pct": int(round(seven_day.get("used_percentage", 0) or 0)),
+        "session_resets": _format_reset_timestamp(five_hour.get("resets_at")),
+        "week_resets": _format_reset_timestamp(seven_day.get("resets_at")),
+        "source": "statusline",
+        "updated_at": payload.get("timestamp") or stat.st_mtime,
+    }
+
+    session_cost = (payload.get("cost") or {}).get("total_cost_usd")
+    if session_cost is not None:
+        try:
+            result["session_cost_usd"] = float(session_cost)
+        except Exception:
+            pass
+
+    return result
+
+
+def _merge_plan_with_current(result):
+    with _plan_lock:
+        current = dict(_plan_data)
+
+    for key in ("error",):
+        value = current.get(key)
+        if value not in (None, ""):
+            result[key] = value
+    return result
+
+
+def _fetch_plan_usage():
+    cached = _read_statusline_plan_usage()
+    if cached:
+        cached = _merge_plan_with_current(cached)
         with _plan_lock:
             _plan_data.clear()
-            _plan_data.update(result)
+            _plan_data.update(cached)
+        return
 
-    except Exception as e:
-        with _plan_lock:
-            _plan_data['available'] = False
-            _plan_data['error'] = str(e)
-    finally:
-        if child:
-            try:
-                child.close(force=True)
-            except Exception:
-                pass
+    with _plan_lock:
+        _plan_data.clear()
+        _plan_data.update({
+            "available": False,
+            "error": "Claude statusLine cache not available yet.",
+        })
 
 
 def _plan_usage_worker():
     while True:
-        _fetch_plan_usage()
-        time.sleep(60)
+        cached = _read_statusline_plan_usage()
+        if cached:
+            cached = _merge_plan_with_current(cached)
+            with _plan_lock:
+                _plan_data.clear()
+                _plan_data.update(cached)
+        else:
+            _fetch_plan_usage()
+
+        time.sleep(5)
 
 
 def start_plan_usage_monitor():
@@ -135,6 +148,12 @@ def start_plan_usage_monitor():
 
 
 def get_plan_usage():
+    cached = _read_statusline_plan_usage()
+    if cached:
+        cached = _merge_plan_with_current(cached)
+        with _plan_lock:
+            _plan_data.clear()
+            _plan_data.update(cached)
     with _plan_lock:
         return dict(_plan_data)
 
