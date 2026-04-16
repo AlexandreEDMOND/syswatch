@@ -12,6 +12,7 @@
       padding: 2rem;
     }
     h1 { font-size: 1.4rem; margin-bottom: 1.5rem; color: #fff; letter-spacing: 0.05em; }
+    h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; color: #555; margin-bottom: 0.75rem; margin-top: 1.5rem; }
     .card {
       background: #1a1a1a;
       border: 1px solid #2a2a2a;
@@ -42,8 +43,14 @@
   </style>
 </head>
 <body>
-  <h1>syswatch — disques</h1>
+  <h1>syswatch</h1>
+
+  <h2>RAM</h2>
+  <div id="ram"></div>
+
+  <h2>Disques</h2>
   <div id="disks"></div>
+
   <p id="refresh-info">Rafraichissement toutes les 3 secondes</p>
 
   <script>
@@ -52,32 +59,38 @@
       return gb >= 1 ? gb.toFixed(1) + " Go" : (bytes / 1e6).toFixed(0) + " Mo";
     }
 
+    function card(title, subtitle, pct, stats) {
+      const warn = pct > 80;
+      return `
+        <div class="card">
+          <div class="card-title"><span>${title}</span>${subtitle ? ` &mdash; ${subtitle}` : ""}</div>
+          <div class="bar-track">
+            <div class="bar-fill ${warn ? "warning" : ""}" style="width:${pct}%"></div>
+          </div>
+          <div class="stats">${stats.map(([k, v]) => `<div>${k} : <span>${v}</span></div>`).join("")}<div><span>${pct}%</span></div></div>
+        </div>`;
+    }
+
     async function refresh() {
       try {
-        const res = await fetch("/api/disks");
-        const disks = await res.json();
-        const container = document.getElementById("disks");
-        container.innerHTML = "";
+        const [ramRes, disksRes] = await Promise.all([fetch("/api/ram"), fetch("/api/disks")]);
+        const ram = await ramRes.json();
+        const disks = await disksRes.json();
 
-        disks.forEach(d => {
+        document.getElementById("ram").innerHTML = card(
+          "Mémoire vive", null, Math.round(ram.percent),
+          [["Utilisée", fmt(ram.used)], ["Disponible", fmt(ram.available)], ["Total", fmt(ram.total)]]
+        );
+
+        document.getElementById("disks").innerHTML = disks.map(d => {
           const pct = Math.round((d.used / d.total) * 100);
-          const warn = pct > 80;
-          container.innerHTML += `
-            <div class="card">
-              <div class="card-title"><span>${d.label}</span> &mdash; ${d.mount}</div>
-              <div class="bar-track">
-                <div class="bar-fill ${warn ? 'warning' : ''}" style="width:${pct}%"></div>
-              </div>
-              <div class="stats">
-                <div>Utilisé : <span>${fmt(d.used)}</span></div>
-                <div>Libre : <span>${fmt(d.free)}</span></div>
-                <div>Total : <span>${fmt(d.total)}</span></div>
-                <div><span>${pct}%</span></div>
-              </div>
-            </div>`;
-        });
+          return card(d.label, d.mount, pct,
+            [["Utilisé", fmt(d.used)], ["Libre", fmt(d.free)], ["Total", fmt(d.total)]]
+          );
+        }).join("");
+
       } catch (e) {
-        document.getElementById("disks").innerHTML = "<p style='color:#f75f5f'>Impossible de contacter le serveur.</p>";
+        document.getElementById("ram").innerHTML = "<p style='color:#f75f5f'>Impossible de contacter le serveur.</p>";
       }
     }
 

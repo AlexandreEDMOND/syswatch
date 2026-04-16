@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
+# /// script
+# dependencies = ["psutil"]
+# ///
 """syswatch - simple local system monitor"""
 
 import json
 import shutil
+import psutil
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 def get_disk_usage():
@@ -40,12 +44,31 @@ def get_disk_usage():
     return mounts
 
 
+def get_ram_usage():
+    mem = psutil.virtual_memory()
+    return {
+        "total": mem.total,
+        "used": mem.used,
+        "available": mem.available,
+        "percent": mem.percent,
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass  # silence les logs HTTP
 
     def do_GET(self):
-        if self.path == "/api/disks":
+        if self.path == "/api/ram":
+            data = get_ram_usage()
+            body = json.dumps(data).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
+
+        elif self.path == "/api/disks":
             data = get_disk_usage()
             body = json.dumps(data).encode()
             self.send_response(200)
