@@ -60,11 +60,12 @@ def _fetch_plan_usage():
 
         child.sendline('/usage')
 
-        # Attendre la fin du bloc usage (dernière ligne significative)
-        child.expect(['spent', pexpect.TIMEOUT], timeout=10)
-        time.sleep(0.5)
-        after  = child.after if isinstance(child.after, str) else ''
-        output = (child.before or '') + after
+        # Laisser le temps à claude de rendre tout le bloc /usage
+        try:
+            child.expect(pexpect.TIMEOUT, timeout=6)
+        except Exception:
+            pass
+        output = child.before or ''
 
         # Nettoyer les codes ANSI et caractères de contrôle
         clean = _RE_ANSI.sub('', output)
@@ -84,6 +85,7 @@ def _fetch_plan_usage():
             'extra_resets':   resets[2].strip()     if len(resets) > 2 else '',
             'spent':          float(spent_m.group(1)) if spent_m       else 0.0,
             'budget':         float(spent_m.group(2)) if spent_m       else 0.0,
+            '_debug':         repr(clean[-800:]),   # temporaire pour debug
         }
 
         with _plan_lock:
