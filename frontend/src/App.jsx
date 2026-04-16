@@ -2,17 +2,20 @@ import { useEffect, useRef, useState } from 'react'
 import ChartCard from './components/ChartCard'
 import DiskCard from './components/DiskCard'
 import BatteryCard from './components/BatteryCard'
-import Section from './components/Section'
+import ClaudeCard from './components/ClaudeCard'
 
 const INTERVAL = 3000
 const MAX_POINTS = 60
+const DISK_WHITELIST = ['Macintosh HD', 'T7']
 
 export default function App() {
-  const [disks, setDisks]     = useState([])
-  const [battery, setBattery] = useState(null)
-  const [cpuSub, setCpuSub]   = useState('—')
-  const [ramSub, setRamSub]   = useState('—')
-  const [netSub, setNetSub]   = useState('—')
+  const [disks, setDisks]         = useState([])
+  const [battery, setBattery]     = useState(null)
+  const [claudeSessions, setClaudeSessions] = useState([])
+  const [cpuVal, setCpuVal]   = useState('—')
+  const [ramVal, setRamVal]   = useState({ pct: '—', detail: '' })
+  const [netVal, setNetVal]   = useState({ down: '—', up: '—' })
+  const [time, setTime]       = useState(new Date())
 
   const cpuRef = useRef(null)
   const ramRef = useRef(null)
@@ -20,16 +23,16 @@ export default function App() {
 
   function fmt(bytes) {
     const gb = bytes / 1e9
-    if (gb >= 1) return `${gb.toFixed(1)} Go`
+    if (gb >= 1) return `${gb.toFixed(1)} GB`
     const mb = bytes / 1e6
-    if (mb >= 1) return `${mb.toFixed(1)} Mo`
-    return `${(bytes / 1e3).toFixed(0)} Ko`
+    if (mb >= 1) return `${mb.toFixed(0)} MB`
+    return `${(bytes / 1e3).toFixed(0)} KB`
   }
 
   function fmtSpeed(bps) {
-    if (bps >= 1e6) return `${(bps / 1e6).toFixed(1)} Mo/s`
-    if (bps >= 1e3) return `${(bps / 1e3).toFixed(0)} Ko/s`
-    return `${bps.toFixed(0)} o/s`
+    if (bps >= 1e6) return `${(bps / 1e6).toFixed(1)} MB/s`
+    if (bps >= 1e3) return `${(bps / 1e3).toFixed(0)} KB/s`
+    return `${bps.toFixed(0)} B/s`
   }
 
   function pushPoint(chartRef, value, label, datasetIndex = 0) {
@@ -45,36 +48,42 @@ export default function App() {
   }
 
   useEffect(() => {
+    const id = setInterval(() => setTime(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  useEffect(() => {
     async function refresh() {
       const now = new Date().toLocaleTimeString('fr-FR')
       try {
-        const [cpu, ram, net, batt, disksData] = await Promise.all([
+        const [cpu, ram, net, batt, disksData, claudeData] = await Promise.all([
           fetch('/api/cpu').then(r => r.json()),
           fetch('/api/ram').then(r => r.json()),
           fetch('/api/network').then(r => r.json()),
           fetch('/api/battery').then(r => r.json()),
           fetch('/api/disks').then(r => r.json()),
+          fetch('/api/claude').then(r => r.json()),
         ])
 
         // CPU
-        const cpuColor = cpu.percent > 80 ? '#f75f5f' : '#4f8ef7'
+        const cpuColor = cpu.percent > 80 ? '#ff2040' : '#00ff6e'
         if (cpuRef.current) {
           cpuRef.current.data.datasets[0].borderColor = cpuColor
-          cpuRef.current.data.datasets[0].backgroundColor = cpuColor + '22'
+          cpuRef.current.data.datasets[0].backgroundColor = cpuColor + '15'
         }
         pushPoint(cpuRef, cpu.percent, now)
-        setCpuSub(`${cpu.percent.toFixed(1)}%`)
+        setCpuVal(cpu.percent.toFixed(1))
 
         // RAM
-        const ramColor = ram.percent > 80 ? '#f75f5f' : '#a78bfa'
+        const ramColor = ram.percent > 80 ? '#ff2040' : '#00d9ff'
         if (ramRef.current) {
           ramRef.current.data.datasets[0].borderColor = ramColor
-          ramRef.current.data.datasets[0].backgroundColor = ramColor + '22'
+          ramRef.current.data.datasets[0].backgroundColor = ramColor + '15'
         }
         pushPoint(ramRef, ram.percent, now)
-        setRamSub(`${fmt(ram.used)} / ${fmt(ram.total)}`)
+        setRamVal({ pct: ram.percent.toFixed(1), detail: `${fmt(ram.used)} / ${fmt(ram.total)}` })
 
-        // Réseau — dataset 0 = reçu, dataset 1 = envoyé
+        // Network
         const recvKB = net.bytes_recv_per_sec / 1e3
         const sentKB = net.bytes_sent_per_sec / 1e3
         if (netRef.current) {
@@ -88,10 +97,11 @@ export default function App() {
           }
           netRef.current.update('none')
         }
-        setNetSub(`↓ ${fmtSpeed(net.bytes_recv_per_sec)}  ↑ ${fmtSpeed(net.bytes_sent_per_sec)}`)
+        setNetVal({ down: fmtSpeed(net.bytes_recv_per_sec), up: fmtSpeed(net.bytes_sent_per_sec) })
 
         setBattery(batt)
-        setDisks(disksData)
+        setDisks(disksData.filter(d => DISK_WHITELIST.includes(d.label)))
+        setClaudeSessions(claudeData)
       } catch (e) {
         console.error(e)
       }
@@ -102,55 +112,128 @@ export default function App() {
     return () => clearInterval(id)
   }, [])
 
+  const clockStr = time.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  const dateStr  = time.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
+  const cpuNum   = parseFloat(cpuVal)
+  const ramNum   = parseFloat(ramVal.pct)
+
   return (
-    <>
-      <h1 style={{ fontSize: '1.4rem', marginBottom: '1.5rem', color: '#fff', letterSpacing: '0.05em' }}>
-        syswatch
-      </h1>
+    <div className="app">
+      <div className="scanlines" />
 
-      <Section label="CPU">
-        <ChartCard
-          title="Processeur"
-          sub={cpuSub}
-          chartRef={cpuRef}
-          color="#4f8ef7"
-          yMax={100}
-        />
-      </Section>
+      {/* ── Header ── */}
+      <header className="header">
+        <div className="header-left">
+          <span className="logo">SYSWATCH</span>
+          <span className="live-dot" />
+          <span className="live-label">LIVE</span>
+        </div>
 
-      <Section label="RAM">
-        <ChartCard
-          title="Mémoire vive"
-          sub={ramSub}
-          chartRef={ramRef}
-          color="#a78bfa"
-          yMax={100}
-        />
-      </Section>
+        <div className="header-center">
+          <div className="header-stat">
+            <span className="header-stat-label">CPU</span>
+            <span className="header-stat-val" style={{ color: cpuNum > 80 ? 'var(--red)' : 'var(--accent)' }}>
+              {cpuVal}%
+            </span>
+          </div>
+          <div className="header-stat">
+            <span className="header-stat-label">MEM</span>
+            <span className="header-stat-val" style={{ color: ramNum > 80 ? 'var(--red)' : 'var(--blue)' }}>
+              {ramVal.pct}%
+            </span>
+          </div>
+          <div className="header-stat">
+            <span className="header-stat-label">RX</span>
+            <span className="header-stat-val" style={{ color: 'var(--orange)' }}>{netVal.down}</span>
+          </div>
+          <div className="header-stat">
+            <span className="header-stat-label">TX</span>
+            <span className="header-stat-val" style={{ color: 'var(--yellow)' }}>{netVal.up}</span>
+          </div>
+        </div>
 
-      <Section label="Réseau">
-        <ChartCard
-          title="Débit réseau"
-          sub={netSub}
-          chartRef={netRef}
-          color="#34d399"
-          color2="#f97316"
-          label1="↓ Reçu"
-          label2="↑ Envoyé"
-        />
-      </Section>
+        <div className="header-right">
+          <span className="clock">{clockStr}</span>
+          <span className="date">{dateStr}</span>
+        </div>
+      </header>
 
-      <Section label="Batterie">
-        <BatteryCard data={battery} />
-      </Section>
+      {/* ── Main grid ── */}
+      <main className="main-grid">
 
-      <Section label="Disques">
-        {disks.map(d => <DiskCard key={d.mount} data={d} />)}
-      </Section>
+        {/* CPU */}
+        <div className="panel">
+          <div className="panel-header">
+            <span className="panel-label">PROCESSOR</span>
+            <div className="panel-value-stack">
+              <span className="panel-value" style={{ color: cpuNum > 80 ? 'var(--red)' : 'var(--accent)' }}>
+                {cpuVal}<span className="unit">%</span>
+              </span>
+            </div>
+          </div>
+          <div className="chart-wrap">
+            <ChartCard chartRef={cpuRef} id="cpu" color="#00ff6e" yMax={100} />
+          </div>
+        </div>
 
-      <p style={{ fontSize: '0.75rem', color: '#444', marginTop: '2rem' }}>
-        Rafraichissement toutes les {INTERVAL / 1000} secondes
-      </p>
-    </>
+        {/* RAM */}
+        <div className="panel">
+          <div className="panel-header">
+            <span className="panel-label">MEMORY</span>
+            <div className="panel-value-stack">
+              <span className="panel-value" style={{ color: ramNum > 80 ? 'var(--red)' : 'var(--blue)' }}>
+                {ramVal.pct}<span className="unit">%</span>
+              </span>
+              <span className="panel-sub">{ramVal.detail}</span>
+            </div>
+          </div>
+          <div className="chart-wrap">
+            <ChartCard chartRef={ramRef} id="ram" color="#00d9ff" yMax={100} />
+          </div>
+        </div>
+
+        {/* Network — spans both rows in col 3 */}
+        <div className="panel panel-network">
+          <div className="panel-header">
+            <span className="panel-label">NETWORK</span>
+            <div className="panel-net-stats">
+              <span><span className="net-arrow-down">↓ </span>{netVal.down}</span>
+              <span><span className="net-arrow-up">↑ </span>{netVal.up}</span>
+            </div>
+          </div>
+          <div className="chart-wrap">
+            <ChartCard
+              chartRef={netRef}
+              id="net"
+              color="#ff7a00"
+              color2="#ffd600"
+              label1="↓ RX"
+              label2="↑ TX"
+            />
+          </div>
+        </div>
+
+        {/* Battery */}
+        <div className="panel">
+          <div className="panel-label-sm">BATTERY</div>
+          <BatteryCard data={battery} />
+        </div>
+
+        {/* Disks */}
+        <div className="panel">
+          <div className="panel-label-sm">STORAGE</div>
+          <div className="disks-list">
+            {disks.map(d => <DiskCard key={d.mount} data={d} />)}
+          </div>
+        </div>
+
+        {/* Claude Code usage */}
+        <div className="panel panel-claude">
+          <div className="panel-label-sm">CLAUDE CODE</div>
+          <ClaudeCard sessions={claudeSessions} />
+        </div>
+
+      </main>
+    </div>
   )
 }

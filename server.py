@@ -92,6 +92,76 @@ def get_network_usage():
     }
 
 
+def get_claude_usage():
+    """Agrège les tokens utilisés depuis toutes les sessions Claude Code actives."""
+    home = os.path.expanduser("~")
+    sessions_dir = os.path.join(home, ".claude", "sessions")
+    projects_dir = os.path.join(home, ".claude", "projects")
+
+    if not os.path.isdir(sessions_dir):
+        return []
+
+    results = []
+    for fname in os.listdir(sessions_dir):
+        if not fname.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(sessions_dir, fname)) as f:
+                session = json.load(f)
+        except Exception:
+            continue
+
+        pid        = session.get("pid")
+        session_id = session.get("sessionId")
+        cwd        = session.get("cwd", "")
+
+        if not pid or not session_id:
+            continue
+        if not psutil.pid_exists(pid):
+            continue
+
+        # ~/.claude/projects/ directories are named by replacing / with -
+        project_key = cwd.replace("/", "-")
+        jsonl_path  = os.path.join(projects_dir, project_key, f"{session_id}.jsonl")
+        if not os.path.exists(jsonl_path):
+            continue
+
+        totals = {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        }
+        model = None
+
+        with open(jsonl_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    if entry.get("type") == "assistant":
+                        msg = entry.get("message", {})
+                        if isinstance(msg, dict):
+                            if not model:
+                                model = msg.get("model")
+                            usage = msg.get("usage", {})
+                            for key in totals:
+                                totals[key] += usage.get(key, 0)
+                except Exception:
+                    continue
+
+        results.append({
+            "sessionId": session_id,
+            "cwd": cwd,
+            "model": model,
+            **totals,
+        })
+
+    return results
+
+
 def get_battery():
     batt = psutil.sensors_battery()
     if batt is None:
@@ -127,6 +197,8 @@ class Handler(BaseHTTPRequestHandler):
             json_response(self, get_battery())
         elif self.path == "/api/disks":
             json_response(self, get_disk_usage())
+        elif self.path == "/api/claude":
+            json_response(self, get_claude_usage())
         elif self.path == "/" or self.path == "/index.html":
             with open("index.html", "rb") as f:
                 content = f.read()

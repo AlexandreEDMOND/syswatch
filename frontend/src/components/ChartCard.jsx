@@ -8,28 +8,20 @@ import {
 
 Chart.register(LineElement, PointElement, LineController, CategoryScale, LinearScale, Filler, Tooltip, Legend)
 
-const cardStyle = {
-  background: '#1a1a1a',
-  border: '1px solid #2a2a2a',
-  borderRadius: '10px',
-  padding: '1.2rem 1.5rem',
-  marginBottom: '1rem',
-}
-
-export default function ChartCard({ title, sub, chartRef, color, color2, label1, label2, yMax }) {
+export default function ChartCard({ chartRef, id, color, color2, label1, label2, yMax }) {
   useEffect(() => {
-    const canvas = document.getElementById(`chart-${title}`)
+    const canvas = document.getElementById(`chart-${id}`)
     if (!canvas || chartRef.current) return
 
     const datasets = [{
-      label: label1 ?? title,
+      label: label1 ?? id,
       data: [],
       borderColor: color,
-      backgroundColor: color + '22',
-      borderWidth: 2,
+      backgroundColor: color + '12',
+      borderWidth: 1.5,
       pointRadius: 0,
       fill: true,
-      tension: 0.4,
+      tension: 0.35,
     }]
 
     if (color2) {
@@ -37,11 +29,11 @@ export default function ChartCard({ title, sub, chartRef, color, color2, label1,
         label: label2 ?? '',
         data: [],
         borderColor: color2,
-        backgroundColor: color2 + '22',
-        borderWidth: 2,
+        backgroundColor: color2 + '12',
+        borderWidth: 1.5,
         pointRadius: 0,
         fill: true,
-        tension: 0.4,
+        tension: 0.35,
       })
     }
 
@@ -55,11 +47,25 @@ export default function ChartCard({ title, sub, chartRef, color, color2, label1,
         plugins: {
           legend: {
             display: !!color2,
-            labels: { color: '#666', boxWidth: 12, font: { size: 11 } },
+            position: 'top',
+            align: 'end',
+            labels: {
+              color: '#2e6640',
+              boxWidth: 8,
+              boxHeight: 2,
+              font: { size: 9, family: "'Share Tech Mono', monospace" },
+              padding: 6,
+            },
           },
           tooltip: {
+            backgroundColor: '#040d07',
+            borderColor: '#0d2416',
+            borderWidth: 1,
+            titleColor: '#2e6640',
+            bodyColor: '#00ff6e',
+            padding: 6,
             callbacks: {
-              label: ctx => ` ${ctx.parsed.y.toFixed(1)}${color2 ? ' Ko/s' : ' %'}`,
+              label: ctx => ` ${ctx.parsed.y.toFixed(1)}${color2 ? ' KB/s' : '%'}`,
             },
           },
         },
@@ -68,8 +74,13 @@ export default function ChartCard({ title, sub, chartRef, color, color2, label1,
           y: {
             min: 0,
             max: yMax ?? undefined,
-            grid: { color: '#1e1e1e' },
-            ticks: { color: '#444', font: { size: 10 } },
+            grid: { color: '#0a1e10', lineWidth: 0.5 },
+            ticks: {
+              color: '#1a4a28',
+              font: { size: 8, family: "'Share Tech Mono', monospace" },
+              maxTicksLimit: 5,
+            },
+            border: { display: false },
           },
         },
       },
@@ -82,14 +93,8 @@ export default function ChartCard({ title, sub, chartRef, color, color2, label1,
   }, [])
 
   return (
-    <div style={cardStyle}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.8rem' }}>
-        <span style={{ fontSize: '0.95rem', color: '#fff', fontWeight: 600 }}>{title}</span>
-        <span style={{ fontSize: '0.82rem', color: '#ccc' }}>{sub}</span>
-      </div>
-      <div style={{ position: 'relative', height: '90px' }}>
-        <canvas id={`chart-${title}`} />
-      </div>
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <canvas id={`chart-${id}`} style={{ position: 'absolute', inset: 0 }} />
     </div>
   )
 }
