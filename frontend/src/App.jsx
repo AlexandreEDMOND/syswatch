@@ -3,6 +3,7 @@ import ChartCard from './components/ChartCard'
 import DiskCard from './components/DiskCard'
 import BatteryCard from './components/BatteryCard'
 import ClaudeCard from './components/ClaudeCard'
+import PowerCard from './components/PowerCard'
 
 const INTERVAL = 3000
 const MAX_POINTS = 60
@@ -12,6 +13,7 @@ export default function App() {
   const [disks, setDisks]         = useState([])
   const [battery, setBattery]     = useState(null)
   const [claudeSessions, setClaudeSessions] = useState([])
+  const [power, setPower]                   = useState(null)
   const [cpuVal, setCpuVal]   = useState('—')
   const [ramVal, setRamVal]   = useState({ pct: '—', detail: '' })
   const [netVal, setNetVal]   = useState({ down: '—', up: '—' })
@@ -56,13 +58,14 @@ export default function App() {
     async function refresh() {
       const now = new Date().toLocaleTimeString('fr-FR')
       try {
-        const [cpu, ram, net, batt, disksData, claudeData] = await Promise.all([
+        const [cpu, ram, net, batt, disksData, claudeData, powerData] = await Promise.all([
           fetch('/api/cpu').then(r => r.json()),
           fetch('/api/ram').then(r => r.json()),
           fetch('/api/network').then(r => r.json()),
           fetch('/api/battery').then(r => r.json()),
           fetch('/api/disks').then(r => r.json()),
           fetch('/api/claude').then(r => r.json()),
+          fetch('/api/power').then(r => r.json()),
         ])
 
         // CPU
@@ -102,6 +105,7 @@ export default function App() {
         setBattery(batt)
         setDisks(disksData.filter(d => DISK_WHITELIST.includes(d.label)))
         setClaudeSessions(claudeData)
+        setPower(powerData)
       } catch (e) {
         console.error(e)
       }
@@ -231,6 +235,12 @@ export default function App() {
         <div className="panel panel-claude">
           <div className="panel-label-sm">CLAUDE CODE</div>
           <ClaudeCard sessions={claudeSessions} />
+        </div>
+
+        {/* Power consumption */}
+        <div className="panel panel-power">
+          <div className="panel-label-sm">POWER</div>
+          <PowerCard data={power} />
         </div>
 
       </main>

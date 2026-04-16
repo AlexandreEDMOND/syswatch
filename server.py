@@ -6,7 +6,10 @@
 
 import json
 import os
+import re
 import shutil
+import subprocess
+import threading
 import time
 import psutil
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -14,6 +17,68 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 # --- état réseau pour calculer le débit ---
 _net_prev = None
 _net_prev_time = None
+
+# --- powermetrics (power consumption) ---
+_power_data = {"cpu_mw": 0, "gpu_mw": 0, "ane_mw": 0, "combined_mw": 0, "available": False}
+_power_lock = threading.Lock()
+
+_RE_CPU     = re.compile(r'CPU Power:\s+(\d+)\s+mW')
+_RE_GPU     = re.compile(r'GPU Power:\s+(\d+)\s+mW')
+_RE_ANE     = re.compile(r'ANE Power:\s+(\d+)\s+mW')
+_RE_COMBINED = re.compile(r'Combined Power[^:]*:\s+(\d+)\s+mW')
+
+
+def _powermetrics_worker():
+    """Tourne en arrière-plan et lit la sortie de powermetrics en continu."""
+    # Si on est root, pas besoin de sudo; sinon on essaie sudo -n
+    cmd = ["powermetrics",
+           "--samplers", "cpu_power,gpu_power,ane_power",
+           "-i", "2000", "-n", "-1",
+           "--format", "text",
+           "--buffer-size", "0"]
+    if os.geteuid() != 0:
+        cmd = ["sudo", "-n"] + cmd
+
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except FileNotFoundError:
+        return  # powermetrics not found
+
+    pending = {}
+    for line in proc.stdout:
+        line = line.strip()
+        m = _RE_CPU.match(line)
+        if m:
+            pending["cpu_mw"] = int(m.group(1))
+        m = _RE_GPU.match(line)
+        if m:
+            pending["gpu_mw"] = int(m.group(1))
+        m = _RE_ANE.match(line)
+        if m:
+            pending["ane_mw"] = int(m.group(1))
+        m = _RE_COMBINED.match(line)
+        if m:
+            pending["combined_mw"] = int(m.group(1))
+            # combined_mw est la dernière ligne du bloc → on flush
+            with _power_lock:
+                _power_data.update(pending)
+                _power_data["available"] = True
+            pending = {}
+
+
+def start_powermetrics():
+    t = threading.Thread(target=_powermetrics_worker, daemon=True)
+    t.start()
+
+
+def get_power_usage():
+    with _power_lock:
+        return dict(_power_data)
 
 
 def get_disk_usage():
@@ -120,7 +185,6 @@ def get_claude_usage():
         if not psutil.pid_exists(pid):
             continue
 
-        # ~/.claude/projects/ directories are named by replacing / with -
         project_key = cwd.replace("/", "-")
         jsonl_path  = os.path.join(projects_dir, project_key, f"{session_id}.jsonl")
         if not os.path.exists(jsonl_path):
@@ -199,6 +263,8 @@ class Handler(BaseHTTPRequestHandler):
             json_response(self, get_disk_usage())
         elif self.path == "/api/claude":
             json_response(self, get_claude_usage())
+        elif self.path == "/api/power":
+            json_response(self, get_power_usage())
         elif self.path == "/" or self.path == "/index.html":
             with open("index.html", "rb") as f:
                 content = f.read()
@@ -212,11 +278,12 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    # Initialise le compteur réseau avant de démarrer
     psutil.cpu_percent(interval=None)
     get_network_usage()
+    start_powermetrics()
 
     port = 8080
     server = HTTPServer(("localhost", port), Handler)
     print(f"syswatch running → http://localhost:{port}")
+    print("Note: pour les données de puissance, lancer avec sudo")
     server.serve_forever()
