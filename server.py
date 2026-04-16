@@ -28,8 +28,8 @@ _plan_data = {"available": False}
 _plan_lock = threading.Lock()
 
 _RE_ANSI    = re.compile(r'\x1b(?:[@-Z\\-_]|\[[0-9;?]*[ -/]*[@-~])')
-_RE_PCT     = re.compile(r'(\d+)%\s+used')
-_RE_RESETS  = re.compile(r'Resets\s+(.+)')
+_RE_PCT     = re.compile(r'(\d+)%\s*used')
+_RE_RESETS  = re.compile(r'Resets\s+([^\n(]+\([^)]+\))')
 _RE_SPENT   = re.compile(r'\$([0-9.]+)\s*/\s*\$([0-9.]+)\s+spent')
 
 
@@ -92,7 +92,7 @@ def _fetch_plan_usage():
             'extra_resets':   resets[2].strip()     if len(resets) > 2 else '',
             'spent':          float(spent_m.group(1)) if spent_m       else 0.0,
             'budget':         float(spent_m.group(2)) if spent_m       else 0.0,
-            '_debug':         repr(clean[-800:]),   # temporaire pour debug
+            '_debug':         repr(clean[:1500]),   # temporaire pour debug
         }
 
         with _plan_lock:
