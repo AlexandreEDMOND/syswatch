@@ -5,8 +5,8 @@ cd "$(dirname "$0")"
 
 echo "Démarrage de syswatch..."
 
-# API Python en arrière-plan
-uv run server.py &
+# API Python en arrière-plan (sudo pour powermetrics)
+sudo uv run server.py &
 API_PID=$!
 
 # Frontend Vite (ouvre le navigateur automatiquement)
