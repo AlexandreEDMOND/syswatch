@@ -367,17 +367,10 @@ export default function App() {
         </button>
 
         <button type="button" className="panel panel-button panel-claude panel-claude-main" onClick={() => openDetail('claude')}>
-          <div className="panel-header panel-header-main">
+          <div className="panel-header panel-header-main panel-header-ai-compact">
             <span className="panel-label">AI USAGE</span>
-            <div className="panel-value-stack">
-              <span className="panel-value panel-value-ai">
-                {claudeSessions.length + codex.length}
-                <span className="unit"> live</span>
-              </span>
-              <span className="panel-sub">Claude et Codex au premier plan</span>
-            </div>
           </div>
-          <ClaudeCard sessions={claudeSessions} plan={plan} codex={codex} />
+          <ClaudeCard plan={plan} codex={codex} />
         </button>
 
         <button type="button" className="panel panel-button panel-power panel-power-compact" onClick={() => openDetail('power')}>

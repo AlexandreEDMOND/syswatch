@@ -367,6 +367,10 @@ button {
   align-items: flex-start;
 }
 
+.panel-header-ai-compact {
+  margin-bottom: 0.45rem;
+}
+
 .panel-stats-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

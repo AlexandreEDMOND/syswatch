@@ -63,7 +63,7 @@ function fmtCodexReset(ts) {
   return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
 }
 
-export default function ClaudeCard({ sessions, plan, codex }) {
+export default function ClaudeCard({ plan, codex }) {
   const hasPlan = plan && plan.available
   const codexSession = codex?.[0]
   const hasCodex = !!codexSession
@@ -75,7 +75,6 @@ export default function ClaudeCard({ sessions, plan, codex }) {
       <div className="assistant-mini-block">
         <div className="assistant-mini-header">
           <span className="assistant-mini-title">Claude Code</span>
-          <span className="assistant-mini-meta">{sessions?.length ?? 0} session{(sessions?.length ?? 0) > 1 ? 's' : ''}</span>
         </div>
         {hasPlan ? (
           <div className="plan-section">
@@ -105,7 +104,6 @@ export default function ClaudeCard({ sessions, plan, codex }) {
       <div className="assistant-mini-block assistant-mini-block-codex">
         <div className="assistant-mini-header">
           <span className="assistant-mini-title">Codex</span>
-          <span className="assistant-mini-meta">{hasCodex ? (codexSession.plan_type ?? 'active') : 'no data'}</span>
         </div>
         {hasCodex ? (
           <div className="plan-section">
