@@ -31,9 +31,12 @@ function fmtInt(value) {
   return new Intl.NumberFormat('fr-FR').format(value)
 }
 
-function fmtCodexReset(ts) {
-  if (!ts) return '—'
-  const d = new Date(ts * 1000)
+function fmtResetFallback(rawTs) {
+  if (!rawTs) return null
+
+  const d = new Date(Number(rawTs) * 1000)
+  if (Number.isNaN(d.getTime())) return null
+
   const now = new Date()
   const sameDay = d.toDateString() === now.toDateString()
   if (sameDay) return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
@@ -56,8 +59,10 @@ export default function ClaudeDetail({ sessions, plan, codex, onBack }) {
     total: acc.total + (session.total_tokens ?? 0),
   }), { input: 0, output: 0, total: 0 })
   const codexSession = codexSessions[0]
-  const codexPrimaryUsed = codexSession ? 100 - (codexSession.primary_pct ?? 0) : 0
-  const codexSecondaryUsed = codexSession ? 100 - (codexSession.secondary_pct ?? 0) : 0
+  const codexPrimaryUsed = codexSession ? (codexSession.primary_pct ?? 0) : 0
+  const codexSecondaryUsed = codexSession ? (codexSession.secondary_pct ?? 0) : 0
+  const codexPrimaryReset = codexSession?.primary_resets ?? fmtResetFallback(codexSession?.primary_resets_at)
+  const codexSecondaryReset = codexSession?.secondary_resets ?? fmtResetFallback(codexSession?.secondary_resets_at)
 
   return (
     <div className="detail-page">
@@ -81,7 +86,7 @@ export default function ClaudeDetail({ sessions, plan, codex, onBack }) {
             <p className="detail-kicker">Assistant usage</p>
             <h1 className="detail-title power-detail-title">{activeSessions.length}</h1>
             <p className="detail-copy power-detail-copy">
-              Vue detaillee Claude Code avec barres de plan, tokens agreges et sessions actives. L’espace Codex est deja reserve mais pas encore branche.
+              Vue detaillee des usages Claude Code et Codex avec barres de plan, tokens agreges et sessions recentes.
             </p>
           </div>
 
@@ -170,8 +175,8 @@ export default function ClaudeDetail({ sessions, plan, codex, onBack }) {
               </div>
               {codexSession ? (
                 <>
-                  <PlanBar label="5h limit" pct={codexPrimaryUsed} resets={fmtCodexReset(codexSession.primary_resets_at)} color="var(--yellow)" />
-                  <PlanBar label="Weekly" pct={codexSecondaryUsed} resets={fmtCodexReset(codexSession.secondary_resets_at)} color="var(--orange)" />
+                  <PlanBar label="Session" pct={codexPrimaryUsed} resets={codexPrimaryReset} color="var(--accent)" />
+                  <PlanBar label="Week" pct={codexSecondaryUsed} resets={codexSecondaryReset} color="var(--blue)" />
                 </>
               ) : (
                 <div className="cpu-empty-state">

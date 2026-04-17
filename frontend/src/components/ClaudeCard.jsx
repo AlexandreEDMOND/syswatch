@@ -26,37 +26,12 @@ function PlanBar({ label, pct, resets, color }) {
   )
 }
 
-function CodexPlanBar({ label, pct, resets, color }) {
-  const filled = Math.min(100, pct)
-  const warn = pct >= 80
+function fmtResetFallback(rawTs) {
+  if (!rawTs) return null
 
-  return (
-    <div className="plan-bar-row">
-      <div className="plan-bar-header">
-        <span className="plan-bar-label">{label}</span>
-        <span className="plan-bar-pct" style={{ color: warn ? 'var(--red)' : color }}>
-          {pct}<span className="unit">%</span>
-        </span>
-      </div>
-      <div className="plan-bar-track">
-        <div
-          className="plan-bar-fill"
-          style={{
-            width: `${filled}%`,
-            background: warn ? 'var(--red)' : color,
-            boxShadow: `0 0 6px ${warn ? 'var(--red)' : color}44`,
-            minWidth: pct > 0 ? '2px' : '0',
-          }}
-        />
-      </div>
-      {resets && <span className="plan-bar-resets">Resets {resets}</span>}
-    </div>
-  )
-}
+  const d = new Date(Number(rawTs) * 1000)
+  if (Number.isNaN(d.getTime())) return null
 
-function fmtCodexReset(ts) {
-  if (!ts) return null
-  const d = new Date(ts * 1000)
   const now = new Date()
   const sameDay = d.toDateString() === now.toDateString()
   if (sameDay) return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
@@ -67,8 +42,10 @@ export default function ClaudeCard({ plan, codex }) {
   const hasPlan = plan && plan.available
   const codexSession = codex?.[0]
   const hasCodex = !!codexSession
-  const codexPrimaryUsed = hasCodex ? 100 - (codexSession.primary_pct ?? 0) : 0
-  const codexSecondaryUsed = hasCodex ? 100 - (codexSession.secondary_pct ?? 0) : 0
+  const codexPrimaryUsed = hasCodex ? (codexSession.primary_pct ?? 0) : 0
+  const codexSecondaryUsed = hasCodex ? (codexSession.secondary_pct ?? 0) : 0
+  const codexPrimaryReset = codexSession?.primary_resets ?? fmtResetFallback(codexSession?.primary_resets_at)
+  const codexSecondaryReset = codexSession?.secondary_resets ?? fmtResetFallback(codexSession?.secondary_resets_at)
 
   return (
     <div className="claude-card">
@@ -107,17 +84,17 @@ export default function ClaudeCard({ plan, codex }) {
         </div>
         {hasCodex ? (
           <div className="plan-section">
-            <CodexPlanBar
-              label="5h limit"
+            <PlanBar
+              label="Session"
               pct={codexPrimaryUsed}
-              resets={fmtCodexReset(codexSession.primary_resets_at)}
-              color="var(--yellow)"
+              resets={codexPrimaryReset}
+              color="var(--accent)"
             />
-            <CodexPlanBar
-              label="Weekly"
+            <PlanBar
+              label="Week"
               pct={codexSecondaryUsed}
-              resets={fmtCodexReset(codexSession.secondary_resets_at)}
-              color="var(--orange)"
+              resets={codexSecondaryReset}
+              color="var(--blue)"
             />
           </div>
         ) : (

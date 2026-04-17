@@ -818,9 +818,11 @@ def get_codex_usage():
             "total_tokens":  tokens.get("total_tokens", 0),
             "primary_pct":   rate_limits.get("primary", {}).get("used_percent", 0),
             "primary_resets_at": rate_limits.get("primary", {}).get("resets_at"),
+            "primary_resets": _format_reset_timestamp(rate_limits.get("primary", {}).get("resets_at")),
             "primary_window_minutes": rate_limits.get("primary", {}).get("window_minutes"),
             "secondary_pct": rate_limits.get("secondary", {}).get("used_percent", 0),
             "secondary_resets_at": rate_limits.get("secondary", {}).get("resets_at"),
+            "secondary_resets": _format_reset_timestamp(rate_limits.get("secondary", {}).get("resets_at")),
             "secondary_window_minutes": rate_limits.get("secondary", {}).get("window_minutes"),
             "plan_type": rate_limits.get("plan_type"),
         })
