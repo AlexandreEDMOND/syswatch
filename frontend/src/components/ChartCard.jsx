@@ -23,6 +23,7 @@ function themeColors() {
     panel:     readVar('--panel',      '#040d07'),
     border:    readVar('--border',     '#0d2416'),
     accent:    readVar('--accent',     '#00ff6e'),
+    textBright: readVar('--text-bright', '#f3fff7'),
     textLabel: readVar('--text-label', '#2e6640'),
     textDim:   readVar('--text-dim',   '#1a4a28'),
     chartGrid: readVar('--chart-grid', '#0a1e10'),
@@ -78,17 +79,17 @@ export default function ChartCard({ chartRef, id, color, color2, label1, label2,
               color: tc.textLabel,
               boxWidth: 8,
               boxHeight: 2,
-              font: { size: 9, family: "'Share Tech Mono', monospace" },
-              padding: 6,
+              font: { size: 11, family: "'Share Tech Mono', monospace" },
+              padding: 8,
             },
           },
           tooltip: {
             backgroundColor: tc.panel,
             borderColor: tc.border,
             borderWidth: 1,
-            titleColor: tc.textLabel,
-            bodyColor: tc.accent,
-            padding: 6,
+            titleColor: tc.textDim,
+            bodyColor: tc.textBright,
+            padding: 10,
             callbacks: {
               label: ctx => ` ${ctx.parsed.y.toFixed(1)}${tooltipSuffix ?? (color2 ? ' KB/s' : '%')}`,
             },
@@ -99,11 +100,11 @@ export default function ChartCard({ chartRef, id, color, color2, label1, label2,
           y: {
             min: 0,
             max: yMax ?? undefined,
-            grid: { color: tc.chartGrid, lineWidth: 0.5 },
+            grid: { color: tc.chartGrid, lineWidth: 1 },
             ticks: {
               color: tc.textDim,
-              font: { size: 8, family: "'Share Tech Mono', monospace" },
-              maxTicksLimit: 5,
+              font: { size: 10, family: "'Share Tech Mono', monospace" },
+              maxTicksLimit: 4,
             },
             border: { display: false },
           },
@@ -127,8 +128,8 @@ export default function ChartCard({ chartRef, id, color, color2, label1, label2,
       chart.options.plugins.legend.labels.color = tc.textLabel
       chart.options.plugins.tooltip.backgroundColor = tc.panel
       chart.options.plugins.tooltip.borderColor = tc.border
-      chart.options.plugins.tooltip.titleColor = tc.textLabel
-      chart.options.plugins.tooltip.bodyColor = tc.accent
+      chart.options.plugins.tooltip.titleColor = tc.textDim
+      chart.options.plugins.tooltip.bodyColor = tc.textBright
       chart.options.scales.y.grid.color = tc.chartGrid
       chart.options.scales.y.ticks.color = tc.textDim
       chart.update('none')

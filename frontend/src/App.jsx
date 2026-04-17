@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import ChartCard from './components/ChartCard'
-import DiskCard from './components/DiskCard'
-import BatteryCard from './components/BatteryCard'
 import ClaudeCard from './components/ClaudeCard'
 import PowerCard from './components/PowerCard'
 import DetailPlaceholder from './components/DetailPlaceholder'
@@ -9,10 +7,10 @@ import PowerDetail from './components/PowerDetail'
 import CpuDetail from './components/CpuDetail'
 import MemoryDetail from './components/MemoryDetail'
 import ClaudeDetail from './components/ClaudeDetail'
+import BatteryDetail from './components/BatteryDetail'
 
 const INTERVAL = 3000
 const MAX_POINTS = 60
-const DISK_WHITELIST = ['Macintosh HD', 'T7']
 const DETAIL_SECTIONS = new Set(['cpu', 'memory', 'network', 'battery', 'storage', 'power', 'claude'])
 
 function getRoute() {
@@ -25,16 +23,17 @@ function createSeries() {
   return { labels: [], datasets: [[]] }
 }
 
-function createDualSeries() {
-  return { labels: [], datasets: [[], []] }
-}
-
 function createValueSeries() {
   return { labels: [], values: [] }
 }
 
 function createDualValueSeries() {
   return { labels: [], valuesA: [], valuesB: [] }
+}
+
+function fmtLoad(value) {
+  if (value == null || Number.isNaN(value)) return '—'
+  return value.toFixed(2)
 }
 
 function cssVar(name) {
@@ -48,10 +47,7 @@ function initTheme() {
 }
 
 export default function App() {
-  const [theme, setTheme] = useState(() => initTheme())
   const [route, setRoute] = useState(() => getRoute())
-  const [disks, setDisks]         = useState([])
-  const [battery, setBattery]     = useState(null)
   const [batteryDetails, setBatteryDetails] = useState(null)
   const [claudeSessions, setClaudeSessions] = useState([])
   const [plan, setPlan]                     = useState(null)
@@ -61,15 +57,11 @@ export default function App() {
   const [ram, setRam]                       = useState(null)
   const [cpuVal, setCpuVal]   = useState('—')
   const [ramVal, setRamVal]   = useState({ pct: '—', detail: '' })
-  const [netVal, setNetVal]   = useState({ down: '—', up: '—' })
-  const [time, setTime]       = useState(new Date())
 
   const cpuRef = useRef(null)
   const ramRef = useRef(null)
-  const netRef = useRef(null)
   const cpuSeriesRef = useRef(createSeries())
   const ramSeriesRef = useRef(createSeries())
-  const netSeriesRef = useRef(createDualSeries())
   const thermalSeriesRef = useRef(createValueSeries())
   const combinedPowerSeriesRef = useRef(createValueSeries())
   const batteryTempSeriesRef = useRef(createValueSeries())
@@ -80,18 +72,16 @@ export default function App() {
   const ramSwapSeriesRef = useRef(createValueSeries())
   const ramPressureSeriesRef = useRef(createValueSeries())
 
+  useEffect(() => {
+    initTheme()
+  }, [])
+
   function fmt(bytes) {
     const gb = bytes / 1e9
     if (gb >= 1) return `${gb.toFixed(1)} GB`
     const mb = bytes / 1e6
     if (mb >= 1) return `${mb.toFixed(0)} MB`
     return `${(bytes / 1e3).toFixed(0)} KB`
-  }
-
-  function fmtSpeed(bps) {
-    if (bps >= 1e6) return `${(bps / 1e6).toFixed(1)} MB/s`
-    if (bps >= 1e3) return `${(bps / 1e3).toFixed(0)} KB/s`
-    return `${bps.toFixed(0)} B/s`
   }
 
   function pushPoint(chartRef, value, label, datasetIndex = 0) {
@@ -147,24 +137,12 @@ export default function App() {
     if (series.valuesB.length > MAX_POINTS) series.valuesB.shift()
   }
 
-  function toggleTheme() {
-    const next = theme === 'dark' ? 'light' : 'dark'
-    document.documentElement.dataset.theme = next === 'light' ? 'light' : ''
-    localStorage.setItem('sw-theme', next)
-    setTheme(next)
-  }
-
   function goBackToOverview() {
     if (window.location.pathname !== '/') {
       window.history.pushState({}, '', '/')
     }
     setRoute('overview')
   }
-
-  useEffect(() => {
-    const id = setInterval(() => setTime(new Date()), 1000)
-    return () => clearInterval(id)
-  }, [])
 
   useEffect(() => {
     function handlePopState() {
@@ -179,13 +157,10 @@ export default function App() {
     async function refresh() {
       const now = new Date().toLocaleTimeString('fr-FR')
       try {
-        const [cpu, ram, net, batt, batteryDetailData, disksData, claudeData, powerData, planData, codexData] = await Promise.all([
+        const [cpu, ram, batteryDetailData, claudeData, powerData, planData, codexData] = await Promise.all([
           fetch('/api/cpu').then(r => r.json()),
           fetch('/api/ram').then(r => r.json()),
-          fetch('/api/network').then(r => r.json()),
-          fetch('/api/battery').then(r => r.json()),
           fetch('/api/battery-details').then(r => r.json()),
-          fetch('/api/disks').then(r => r.json()),
           fetch('/api/claude').then(r => r.json()),
           fetch('/api/power').then(r => r.json()),
           fetch('/api/plan').then(r => r.json()),
@@ -232,27 +207,7 @@ export default function App() {
         pushValueSeries(ramSwapSeriesRef, (ram.swap_used ?? 0) / 1e9, now)
         pushValueSeries(ramPressureSeriesRef, ram.memory_pressure_pct ?? null, now)
 
-        // Network
-        const recvKB = net.bytes_recv_per_sec / 1e3
-        const sentKB = net.bytes_sent_per_sec / 1e3
-        pushSeries(netSeriesRef, recvKB, now, 0)
-        pushSeries(netSeriesRef, sentKB, now, 1)
-        if (netRef.current) {
-          netRef.current.data.labels.push(now)
-          netRef.current.data.datasets[0].data.push(recvKB)
-          netRef.current.data.datasets[1].data.push(sentKB)
-          if (netRef.current.data.labels.length > MAX_POINTS) {
-            netRef.current.data.labels.shift()
-            netRef.current.data.datasets[0].data.shift()
-            netRef.current.data.datasets[1].data.shift()
-          }
-          netRef.current.update('none')
-        }
-        setNetVal({ down: fmtSpeed(net.bytes_recv_per_sec), up: fmtSpeed(net.bytes_sent_per_sec) })
-
-        setBattery(batt)
         setBatteryDetails(batteryDetailData)
-        setDisks(disksData.filter(d => DISK_WHITELIST.includes(d.label)))
         setClaudeSessions(claudeData)
         setPlan(planData)
         setCodex(codexData)
@@ -271,10 +226,11 @@ export default function App() {
     return () => clearInterval(id)
   }, [])
 
-  const clockStr = time.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  const dateStr  = time.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
   const cpuNum   = parseFloat(cpuVal)
   const ramNum   = parseFloat(ramVal.pct)
+  const ramSwap = ram?.swap_used ?? 0
+  const ramCompressed = ram?.compressed ?? 0
+  const ramAvailable = ram?.available ?? null
 
   if (route !== 'overview') {
     if (route === 'cpu') {
@@ -313,6 +269,14 @@ export default function App() {
         />
       )
     }
+    if (route === 'battery') {
+      return (
+        <BatteryDetail
+          batteryDetails={batteryDetails}
+          onBack={goBackToOverview}
+        />
+      )
+    }
     if (route === 'claude') {
       return (
         <ClaudeDetail
@@ -329,58 +293,31 @@ export default function App() {
   return (
     <div className="app">
       <div className="scanlines" />
-
-      {/* ── Header ── */}
-      <header className="header">
-        <div className="header-left">
-          <span className="logo">SYSWATCH</span>
-          <span className="live-dot" />
-          <span className="live-label">LIVE</span>
-        </div>
-
-        <div className="header-center">
-          <div className="header-stat">
-            <span className="header-stat-label">CPU</span>
-            <span className="header-stat-val" style={{ color: cpuNum > 80 ? 'var(--red)' : 'var(--accent)' }}>
-              {cpuVal}%
-            </span>
-          </div>
-          <div className="header-stat">
-            <span className="header-stat-label">MEM</span>
-            <span className="header-stat-val" style={{ color: ramNum > 80 ? 'var(--red)' : 'var(--blue)' }}>
-              {ramVal.pct}%
-            </span>
-          </div>
-          <div className="header-stat">
-            <span className="header-stat-label">RX</span>
-            <span className="header-stat-val" style={{ color: 'var(--orange)' }}>{netVal.down}</span>
-          </div>
-          <div className="header-stat">
-            <span className="header-stat-label">TX</span>
-            <span className="header-stat-val" style={{ color: 'var(--yellow)' }}>{netVal.up}</span>
-          </div>
-        </div>
-
-        <div className="header-right">
-          <button type="button" className="theme-toggle" onClick={toggleTheme} title="Basculer le thème">
-            {theme === 'dark' ? '◐' : '◑'}
-          </button>
-          <span className="clock">{clockStr}</span>
-          <span className="date">{dateStr}</span>
-        </div>
-      </header>
-
-      {/* ── Main grid ── */}
       <main className="main-grid">
-
-        {/* CPU */}
-        <button type="button" className="panel panel-button" onClick={() => openDetail('cpu')}>
-          <div className="panel-header">
+        <button type="button" className="panel panel-button panel-cpu-main" onClick={() => openDetail('cpu')}>
+          <div className="panel-header panel-header-main">
             <span className="panel-label">PROCESSOR</span>
             <div className="panel-value-stack">
               <span className="panel-value" style={{ color: cpuNum > 80 ? 'var(--red)' : 'var(--accent)' }}>
                 {cpuVal}<span className="unit">%</span>
               </span>
+              <span className="panel-sub">
+                load {fmtLoad(cpu?.load_avg?.one)} • {cpu?.physical_cores ?? '—'} cores
+              </span>
+            </div>
+          </div>
+          <div className="panel-stats-row">
+            <div className="panel-stat-chip">
+              <span className="panel-stat-chip-label">System</span>
+              <span className="panel-stat-chip-value">{cpu?.times_pct?.system?.toFixed(1) ?? '—'}%</span>
+            </div>
+            <div className="panel-stat-chip">
+              <span className="panel-stat-chip-label">User</span>
+              <span className="panel-stat-chip-value">{cpu?.times_pct?.user?.toFixed(1) ?? '—'}%</span>
+            </div>
+            <div className="panel-stat-chip">
+              <span className="panel-stat-chip-label">Model</span>
+              <span className="panel-stat-chip-value panel-stat-chip-value-wide">{cpu?.model ?? '—'}</span>
             </div>
           </div>
           <div className="chart-wrap">
@@ -394,15 +331,28 @@ export default function App() {
           </div>
         </button>
 
-        {/* RAM */}
-        <button type="button" className="panel panel-button" onClick={() => openDetail('memory')}>
-          <div className="panel-header">
+        <button type="button" className="panel panel-button panel-memory-main" onClick={() => openDetail('memory')}>
+          <div className="panel-header panel-header-main">
             <span className="panel-label">MEMORY</span>
             <div className="panel-value-stack">
               <span className="panel-value" style={{ color: ramNum > 80 ? 'var(--red)' : 'var(--blue)' }}>
                 {ramVal.pct}<span className="unit">%</span>
               </span>
               <span className="panel-sub">{ramVal.detail}</span>
+            </div>
+          </div>
+          <div className="panel-stats-row">
+            <div className="panel-stat-chip">
+              <span className="panel-stat-chip-label">Available</span>
+              <span className="panel-stat-chip-value">{ramAvailable == null ? '—' : fmt(ramAvailable)}</span>
+            </div>
+            <div className="panel-stat-chip">
+              <span className="panel-stat-chip-label">Compressed</span>
+              <span className="panel-stat-chip-value">{ram == null ? '—' : fmt(ramCompressed)}</span>
+            </div>
+            <div className="panel-stat-chip">
+              <span className="panel-stat-chip-label">Swap</span>
+              <span className="panel-stat-chip-value">{ram == null ? '—' : fmt(ramSwap)}</span>
             </div>
           </div>
           <div className="chart-wrap">
@@ -416,54 +366,24 @@ export default function App() {
           </div>
         </button>
 
-        {/* Network — spans both rows in col 3 */}
-        <button type="button" className="panel panel-button panel-network" onClick={() => openDetail('network')}>
-          <div className="panel-header">
-            <span className="panel-label">NETWORK</span>
-            <div className="panel-net-stats">
-              <span><span className="net-arrow-down">↓ </span>{netVal.down}</span>
-              <span><span className="net-arrow-up">↑ </span>{netVal.up}</span>
+        <button type="button" className="panel panel-button panel-claude panel-claude-main" onClick={() => openDetail('claude')}>
+          <div className="panel-header panel-header-main">
+            <span className="panel-label">AI USAGE</span>
+            <div className="panel-value-stack">
+              <span className="panel-value panel-value-ai">
+                {claudeSessions.length + codex.length}
+                <span className="unit"> live</span>
+              </span>
+              <span className="panel-sub">Claude et Codex au premier plan</span>
             </div>
           </div>
-          <div className="chart-wrap">
-            <ChartCard
-              chartRef={netRef}
-              id="net"
-              color="--orange"
-              color2="--yellow"
-              label1="↓ RX"
-              label2="↑ TX"
-              initialData={netSeriesRef.current}
-            />
-          </div>
-        </button>
-
-        {/* Battery */}
-        <button type="button" className="panel panel-button" onClick={() => openDetail('battery')}>
-          <div className="panel-label-sm">BATTERY</div>
-          <BatteryCard data={battery} />
-        </button>
-
-        {/* Disks */}
-        <button type="button" className="panel panel-button" onClick={() => openDetail('storage')}>
-          <div className="panel-label-sm">STORAGE</div>
-          <div className="disks-list">
-            {disks.map(d => <DiskCard key={d.mount} data={d} />)}
-          </div>
-        </button>
-
-        {/* Assistant usage */}
-        <button type="button" className="panel panel-button panel-claude" onClick={() => openDetail('claude')}>
-          <div className="panel-label-sm">AI USAGE</div>
           <ClaudeCard sessions={claudeSessions} plan={plan} codex={codex} />
         </button>
 
-        {/* Power consumption */}
-        <button type="button" className="panel panel-button panel-power" onClick={() => openDetail('power')}>
+        <button type="button" className="panel panel-button panel-power panel-power-compact" onClick={() => openDetail('power')}>
           <div className="panel-label-sm">POWER</div>
           <PowerCard data={power} />
         </button>
-
       </main>
     </div>
   )

@@ -34,11 +34,11 @@ export default function PowerCard({ data }) {
   return (
     <div className="power-card">
       <div className="power-total">
-        <span className="power-total-val">{combinedW}<span className="unit"> W</span></span>
-        <span className="power-total-label">TOTAL</span>
         <span className="power-thermal" style={{ color: thermal.color }}>
           {thermal.label}
         </span>
+        <span className="power-total-val">{combinedW}<span className="unit"> W</span></span>
+        <span className="power-total-label">TOTAL</span>
       </div>
 
       <div className="power-bars">
