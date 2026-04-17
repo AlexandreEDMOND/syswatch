@@ -7,6 +7,11 @@
 - Enrichir `Power detail` avec les frequences et residencies CPU/GPU issues de `powermetrics`
 - Ajouter plus de contexte batterie dans la vue detaillee: capacities, sante, tendance de decharge
 - Remplir la case vide du layout overview
+- Ajouter une estimation du cout electrique en euros de l'ordinateur
+- Revoir la pertinence du panel `Network`, actuellement peu utile
+- Evaluer un remplacement du panel `Network` par un top 5 des processus les plus gourmands en RAM ou CPU
+- Voir quelles informations GPU supplementaires peuvent etre exposees et visualisees
+- Reflechir a une visualisation plus explicite du CPU et des zones qui chauffent le plus, idealement avec un schema ou un graphe dedie
 
 ## Interface
 
@@ -15,6 +20,8 @@
 - Harmoniser overview, detail pages et composants de cartes
 - Mieux distinguer valeurs brutes, valeurs interpretees et signaux qualitatifs
 - Ajouter des bornes d'affichage au graphe network pour eviter de changer d'echelle a chaque pic
+- Ameliorer l'affichage des barres de `AI usage`
+- Ajouter des animations si elles servent reellement la lisibilite et la perception des changements d'etat
 
 ## Lancement / CLI
 
@@ -42,6 +49,7 @@
   - logique de polling / historique
 - Sortir les constantes, mappings et helpers dans des modules dedies
 - Nettoyer les fichiers legacy ou ambigus comme le `index.html` racine si non utilises
+- Etudier un stockage periodique journalier ou horaire des metriques pour construire une base historique plus riche sur l'usage de l'ordinateur
 
 ## Documentation
 

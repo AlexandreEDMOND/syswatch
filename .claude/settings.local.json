@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/alexandre/.codex/**)",
+      "Bash(python3 -m json.tool'ai ça comme info)",
+      "Bash(sqlite3 *)",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -m json.tool)",
+      "Bash(python3 *)",
+      "Bash(uv run --with pexpect python3 -c ' *)",
+      "Bash(uv run *)",
+      "Bash(sudo uv *)",
+      "Bash(curl -s http://localhost:4000/api/claude)",
+      "Bash(curl -s http://localhost:3000/api/claude)",
+      "Bash(curl -s http://localhost:8080/api/claude)",
+      "Bash(curl -s http://localhost:8080/api/plan)",
+      "Bash(system_profiler SPPowerDataType)",
+      "Bash(ioreg -r -n AppleSmartBattery)",
+      "Skill(update-config)",
+      "Bash(npm run *)",
+      "Bash(chmod -R u+w /Users/alexandre/CodePuant/syswatch/frontend/dist)"
+    ]
+  }
+}

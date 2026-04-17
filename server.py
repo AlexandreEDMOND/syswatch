@@ -19,6 +19,10 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 _net_prev = None
 _net_prev_time = None
 
+# --- top processes cache ---
+_proc_data = []
+_proc_lock = threading.Lock()
+
 # --- powermetrics (power consumption) ---
 _power_data = {"cpu_mw": 0, "gpu_mw": 0, "ane_mw": 0, "combined_mw": 0,
                "thermal_pressure": "Nominal", "available": False, "cpu_clusters": [], "cpu_cores": []}
@@ -319,6 +323,22 @@ def _parse_ioreg_value(raw):
         return raw
 
 
+def _extract_ioreg_int(text, key):
+    m = re.search(r'"' + re.escape(key) + r'"=(-?\d+)', text)
+    return int(m.group(1)) if m else None
+
+
+def _extract_ioreg_list(text, key):
+    m = re.search(r'"' + re.escape(key) + r'"=\(([^)]+)\)', text)
+    if not m:
+        return None
+    parts = [x.strip() for x in m.group(1).split(',')]
+    try:
+        return [int(x) for x in parts]
+    except ValueError:
+        return None
+
+
 def get_battery_details():
     cmd = ["ioreg", "-r", "-n", "AppleSmartBattery"]
     try:
@@ -342,6 +362,12 @@ def get_battery_details():
         "ExternalConnected",
         "IsCharging",
         "DeviceName",
+        "DesignCycleCount9C",
+        "AppleRawMaxCapacity",
+        "MaxCapacity",
+        "AdapterDetails",
+        "ChargerData",
+        "BatteryData",
     }
     values = {}
     for line in proc.stdout.splitlines():
@@ -363,6 +389,48 @@ def get_battery_details():
     instant_amperage_raw = values.get("InstantAmperage")
     battery_power_raw = values.get("BatteryPower")
 
+    cycle_count = values.get("CycleCount")
+    design_cycle_count = values.get("DesignCycleCount9C")
+    raw_max_capacity = values.get("AppleRawMaxCapacity")
+    design_capacity = values.get("DesignCapacity")
+
+    cycle_health_pct = None
+    if isinstance(cycle_count, int) and isinstance(design_cycle_count, int) and design_cycle_count > 0:
+        cycle_health_pct = round((1 - cycle_count / design_cycle_count) * 100, 1)
+
+    capacity_health_pct = None
+    if isinstance(raw_max_capacity, int) and isinstance(design_capacity, int) and design_capacity > 0:
+        capacity_health_pct = round(raw_max_capacity / design_capacity * 100, 1)
+
+    adapter_raw = values.get("AdapterDetails", "")
+    adapter_watts = _extract_ioreg_int(adapter_raw, "Watts") if isinstance(adapter_raw, str) else None
+    adapter_voltage_mv = _extract_ioreg_int(adapter_raw, "AdapterVoltage") if isinstance(adapter_raw, str) else None
+    adapter_current_ma = _extract_ioreg_int(adapter_raw, "Current") if isinstance(adapter_raw, str) else None
+
+    charger_raw = values.get("ChargerData", "")
+    charging_voltage_mv = _extract_ioreg_int(charger_raw, "ChargingVoltage") if isinstance(charger_raw, str) else None
+    charging_current_ma = _extract_ioreg_int(charger_raw, "ChargingCurrent") if isinstance(charger_raw, str) else None
+
+    battery_data_raw = values.get("BatteryData", "")
+    cell_voltages_mv = None
+    full_charge_capacity_mah = None
+    data_flash_write_count = None
+    lifetime_operating_time_min = None
+    lifetime_max_temp_c = None
+    lifetime_min_temp_c = None
+    lifetime_avg_temp_raw = None
+    lifetime_max_charge_current_ma = None
+
+    if isinstance(battery_data_raw, str) and battery_data_raw:
+        cell_voltages_mv = _extract_ioreg_list(battery_data_raw, "CellVoltage")
+        full_charge_capacity_mah = _extract_ioreg_int(battery_data_raw, "FccComp1")
+        data_flash_write_count = _extract_ioreg_int(battery_data_raw, "DataFlashWriteCount")
+        lifetime_operating_time_min = _extract_ioreg_int(battery_data_raw, "TotalOperatingTime")
+        lifetime_max_temp_c = _extract_ioreg_int(battery_data_raw, "MaximumTemperature")
+        lifetime_min_temp_c = _extract_ioreg_int(battery_data_raw, "MinimumTemperature")
+        lifetime_avg_temp_raw = _extract_ioreg_int(battery_data_raw, "AverageTemperature")
+        lifetime_max_charge_current_ma = _extract_ioreg_int(battery_data_raw, "MaximumChargeCurrent")
+
     return {
         "available": True,
         "device_name": values.get("DeviceName"),
@@ -375,13 +443,31 @@ def get_battery_details():
         "instant_amperage_ma": _decode_i64(instant_amperage_raw) if isinstance(instant_amperage_raw, int) else None,
         "battery_power_mw": _decode_i64(battery_power_raw) if isinstance(battery_power_raw, int) else None,
         "time_remaining_min": values.get("TimeRemaining"),
-        "cycle_count": values.get("CycleCount"),
-        "design_capacity_mah": values.get("DesignCapacity"),
+        "cycle_count": cycle_count,
+        "design_cycle_count": design_cycle_count,
+        "cycle_health_pct": cycle_health_pct,
+        "design_capacity_mah": design_capacity,
+        "raw_max_capacity_mah": raw_max_capacity,
+        "full_charge_capacity_mah": full_charge_capacity_mah,
+        "capacity_health_pct": capacity_health_pct,
+        "max_capacity_pct": values.get("MaxCapacity"),
         "nominal_charge_capacity_mah": values.get("NominalChargeCapacity"),
         "current_capacity_pct": values.get("CurrentCapacity"),
         "fully_charged": values.get("FullyCharged"),
         "external_connected": values.get("ExternalConnected"),
         "is_charging": values.get("IsCharging"),
+        "adapter_watts": adapter_watts,
+        "adapter_voltage_mv": adapter_voltage_mv,
+        "adapter_current_ma": adapter_current_ma,
+        "charging_voltage_mv": charging_voltage_mv,
+        "charging_current_ma": charging_current_ma,
+        "cell_voltages_mv": cell_voltages_mv,
+        "data_flash_write_count": data_flash_write_count,
+        "lifetime_operating_time_min": lifetime_operating_time_min,
+        "lifetime_max_temp_c": lifetime_max_temp_c,
+        "lifetime_min_temp_c": lifetime_min_temp_c,
+        "lifetime_avg_temp_raw": lifetime_avg_temp_raw,
+        "lifetime_max_charge_current_ma": lifetime_max_charge_current_ma,
     }
 
 
@@ -514,6 +600,50 @@ def get_cpu_usage():
         "core_metrics": cores,
         "power_metrics_available": bool(clusters or cores),
     }
+
+
+def _proc_worker():
+    # Initialisation du cpu_percent pour que le premier delta soit valide
+    for p in psutil.process_iter():
+        try:
+            p.cpu_percent(interval=None)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+    time.sleep(1)
+
+    while True:
+        procs = []
+        for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_info', 'status']):
+            try:
+                info = p.info
+                if info['status'] == 'zombie':
+                    continue
+                mem_mb = round((info['memory_info'].rss if info['memory_info'] else 0) / 1e6, 1)
+                procs.append({
+                    'pid': info['pid'],
+                    'name': info['name'],
+                    'cpu': round(info['cpu_percent'] or 0, 1),
+                    'mem_mb': mem_mb,
+                })
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+        procs.sort(key=lambda x: x['cpu'], reverse=True)
+        with _proc_lock:
+            _proc_data.clear()
+            _proc_data.extend(procs[:5])
+
+        time.sleep(3)
+
+
+def start_proc_monitor():
+    t = threading.Thread(target=_proc_worker, daemon=True)
+    t.start()
+
+
+def get_top_processes():
+    with _proc_lock:
+        return list(_proc_data)
 
 
 def get_network_usage():
@@ -741,6 +871,8 @@ class Handler(BaseHTTPRequestHandler):
             json_response(self, get_power_usage())
         elif self.path == "/api/battery-details":
             json_response(self, get_battery_details())
+        elif self.path == "/api/processes":
+            json_response(self, get_top_processes())
         elif self.path == "/api/plan":
             json_response(self, get_plan_usage())
         elif self.path == "/" or self.path == "/index.html":
@@ -760,6 +892,7 @@ if __name__ == "__main__":
     get_network_usage()
     start_powermetrics()
     start_plan_usage_monitor()
+    start_proc_monitor()
 
     port = 8080
     server = HTTPServer(("localhost", port), Handler)
