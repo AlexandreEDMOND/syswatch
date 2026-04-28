@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Syswatch",
+  "version": "0.1.0",
+  "identifier": "com.codepuant.syswatch",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "../scripts/build-macos-backend.sh && VITE_API_BASE_URL=http://127.0.0.1:8080 npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Syswatch",
+        "width": 1440,
+        "height": 960,
+        "minWidth": 1080,
+        "minHeight": 720,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg", "app"],
+    "category": "DeveloperTool",
+    "resources": ["binaries/*"],
+    "shortDescription": "macOS system monitor",
+    "longDescription": "A macOS system monitor for CPU, memory, battery, storage, power, and local AI coding sessions."
+  }
+}

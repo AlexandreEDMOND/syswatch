@@ -10,6 +10,10 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+src-tauri/target
+src-tauri/gen/schemas
+src-tauri/binaries/*
+!src-tauri/binaries/.gitkeep
 *.local
 
 # Editor directories and files

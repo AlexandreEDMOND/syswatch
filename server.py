@@ -11,9 +11,11 @@ import shutil
 import subprocess
 import threading
 import time
+from pathlib import Path
 from datetime import datetime
 import psutil
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import urlparse
 
 # --- état réseau pour calculer le débit ---
 _net_prev = None
@@ -27,6 +29,18 @@ _proc_lock = threading.Lock()
 _power_data = {"cpu_mw": 0, "gpu_mw": 0, "ane_mw": 0, "combined_mw": 0,
                "thermal_pressure": "Nominal", "available": False, "cpu_clusters": [], "cpu_cores": []}
 _power_lock = threading.Lock()
+_power_history_lock = threading.Lock()
+
+_POWER_AVG_WINDOW_SEC = 14 * 60 * 60
+_POWER_BUCKET_SEC = 5 * 60
+_POWER_BUCKET_COUNT = _POWER_AVG_WINDOW_SEC // _POWER_BUCKET_SEC
+_POWER_SAMPLE_GAP_LIMIT_SEC = 15
+_DATA_DIR = Path(os.environ.get("SYSWATCH_DATA_DIR", Path(__file__).resolve().parent))
+_POWER_HISTORY_PATH = _DATA_DIR / ".syswatch_power_history.json"
+_power_history = {
+    "buckets": [],
+    "last_sample_ts": None,
+}
 
 # --- plan usage via claude /usage ---
 _plan_data = {"available": False}
@@ -178,6 +192,169 @@ _RE_CORE_IDLE = re.compile(r'^CPU\s+(\d+)\s+idle residency:\s+([0-9.]+)%$')
 _cpu_static_info = None
 
 
+def _align_power_bucket(ts):
+    return int(ts // _POWER_BUCKET_SEC) * _POWER_BUCKET_SEC
+
+
+def _power_bucket_cutoff(now_ts):
+    return _align_power_bucket(now_ts - _POWER_AVG_WINDOW_SEC) - _POWER_BUCKET_SEC
+
+
+def _prune_power_buckets_locked(now_ts):
+    cutoff = _power_bucket_cutoff(now_ts)
+    _power_history["buckets"] = [
+        bucket for bucket in _power_history["buckets"]
+        if bucket["start"] >= cutoff
+    ]
+
+
+def _serialize_power_history_locked():
+    return {
+        "version": 1,
+        "bucket_seconds": _POWER_BUCKET_SEC,
+        "window_seconds": _POWER_AVG_WINDOW_SEC,
+        "buckets": [
+            [bucket["start"], bucket["energy_mw_ms"], bucket["duration_ms"]]
+            for bucket in sorted(_power_history["buckets"], key=lambda item: item["start"])
+            if bucket["duration_ms"] > 0
+        ],
+    }
+
+
+def _save_power_history_locked():
+    payload = _serialize_power_history_locked()
+    tmp_path = _POWER_HISTORY_PATH.with_suffix(".tmp")
+    try:
+        _POWER_HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, separators=(",", ":"))
+        os.replace(tmp_path, _POWER_HISTORY_PATH)
+    except OSError:
+        pass
+
+
+def load_power_history():
+    try:
+        with open(_POWER_HISTORY_PATH, encoding="utf-8") as f:
+            payload = json.load(f)
+    except FileNotFoundError:
+        return
+    except Exception:
+        return
+
+    raw_buckets = payload.get("buckets")
+    if not isinstance(raw_buckets, list):
+        return
+
+    now_ts = time.time()
+    loaded_buckets = []
+    for item in raw_buckets:
+        if not isinstance(item, list) or len(item) != 3:
+            continue
+        start, energy_mw_ms, duration_ms = item
+        if not all(isinstance(value, (int, float)) for value in item):
+            continue
+        if duration_ms <= 0:
+            continue
+        loaded_buckets.append({
+            "start": int(start),
+            "energy_mw_ms": int(energy_mw_ms),
+            "duration_ms": int(duration_ms),
+        })
+
+    with _power_history_lock:
+        _power_history["buckets"] = sorted(loaded_buckets, key=lambda item: item["start"])
+        _prune_power_buckets_locked(now_ts)
+
+
+def _find_or_create_power_bucket_locked(bucket_start):
+    for bucket in _power_history["buckets"]:
+        if bucket["start"] == bucket_start:
+            return bucket, False
+
+    bucket = {
+        "start": bucket_start,
+        "energy_mw_ms": 0,
+        "duration_ms": 0,
+    }
+    _power_history["buckets"].append(bucket)
+    _power_history["buckets"].sort(key=lambda item: item["start"])
+    return bucket, True
+
+
+def _record_power_interval(sample_mw, end_ts, duration_sec):
+    if duration_sec <= 0:
+        return
+
+    with _power_history_lock:
+        created_bucket = False
+        interval_start = end_ts - duration_sec
+        cursor = interval_start
+
+        while cursor < end_ts:
+            bucket_start = _align_power_bucket(cursor)
+            bucket_end = bucket_start + _POWER_BUCKET_SEC
+            segment_end = min(end_ts, bucket_end)
+            segment_ms = int(round((segment_end - cursor) * 1000))
+            if segment_ms > 0:
+                bucket, created = _find_or_create_power_bucket_locked(bucket_start)
+                bucket["energy_mw_ms"] += int(round(sample_mw * segment_ms))
+                bucket["duration_ms"] += segment_ms
+                created_bucket = created_bucket or created
+            cursor = segment_end
+
+        _prune_power_buckets_locked(end_ts)
+        if created_bucket:
+            _save_power_history_locked()
+
+
+def record_power_sample(sample_mw, sample_ts):
+    with _power_history_lock:
+        last_sample_ts = _power_history["last_sample_ts"]
+        _power_history["last_sample_ts"] = sample_ts
+
+    if last_sample_ts is None:
+        return
+
+    duration_sec = sample_ts - last_sample_ts
+    if duration_sec <= 0 or duration_sec > _POWER_SAMPLE_GAP_LIMIT_SEC:
+        return
+
+    _record_power_interval(sample_mw, sample_ts, duration_sec)
+
+
+def _get_power_average_locked(now_ts):
+    window_start = now_ts - _POWER_AVG_WINDOW_SEC
+    total_energy_mw_ms = 0.0
+    total_duration_ms = 0.0
+
+    for bucket in _power_history["buckets"]:
+        bucket_start = bucket["start"]
+        bucket_end = bucket_start + _POWER_BUCKET_SEC
+        overlap_start = max(bucket_start, window_start)
+        overlap_end = min(bucket_end, now_ts)
+        overlap_sec = overlap_end - overlap_start
+        if overlap_sec <= 0:
+            continue
+
+        ratio = overlap_sec / _POWER_BUCKET_SEC
+        total_energy_mw_ms += bucket["energy_mw_ms"] * ratio
+        total_duration_ms += bucket["duration_ms"] * ratio
+
+    if total_duration_ms <= 0:
+        return {
+            "rolling_avg_14h_mw": None,
+            "rolling_avg_14h_available": False,
+            "rolling_avg_14h_coverage_sec": 0,
+        }
+
+    return {
+        "rolling_avg_14h_mw": round(total_energy_mw_ms / total_duration_ms, 1),
+        "rolling_avg_14h_available": True,
+        "rolling_avg_14h_coverage_sec": int(round(total_duration_ms / 1000)),
+    }
+
+
 def _parse_freq_mhz(raw_value, unit):
     value = float(raw_value)
     if unit == "GHz":
@@ -288,6 +465,7 @@ def _powermetrics_worker():
             with _power_lock:
                 _power_data.update(pending)
                 _power_data["available"] = True
+            record_power_sample(pending["combined_mw"], time.time())
             pending = {}
             cluster_metrics = {}
             core_metrics = {}
@@ -299,8 +477,16 @@ def start_powermetrics():
 
 
 def get_power_usage():
+    now_ts = time.time()
     with _power_lock:
-        return dict(_power_data)
+        power_data = dict(_power_data)
+    with _power_history_lock:
+        _prune_power_buckets_locked(now_ts)
+        avg_data = _get_power_average_locked(now_ts)
+    power_data.update(avg_data)
+    power_data["rolling_avg_14h_window_sec"] = _POWER_AVG_WINDOW_SEC
+    power_data["rolling_avg_14h_bucket_sec"] = _POWER_BUCKET_SEC
+    return power_data
 
 
 def _decode_i64(value):
@@ -845,7 +1031,6 @@ def json_response(handler, data):
     body = json.dumps(data).encode()
     handler.send_response(200)
     handler.send_header("Content-Type", "application/json")
-    handler.send_header("Access-Control-Allow-Origin", "*")
     handler.end_headers()
     handler.wfile.write(body)
 
@@ -854,30 +1039,44 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
+    def end_headers(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        super().end_headers()
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.end_headers()
+
     def do_GET(self):
-        if self.path == "/api/ram":
+        path = urlparse(self.path).path
+
+        if path == "/api/health":
+            json_response(self, {"ok": True})
+        elif path == "/api/ram":
             json_response(self, get_ram_usage())
-        elif self.path == "/api/cpu":
+        elif path == "/api/cpu":
             json_response(self, get_cpu_usage())
-        elif self.path == "/api/network":
+        elif path == "/api/network":
             json_response(self, get_network_usage())
-        elif self.path == "/api/battery":
+        elif path == "/api/battery":
             json_response(self, get_battery())
-        elif self.path == "/api/disks":
+        elif path == "/api/disks":
             json_response(self, get_disk_usage())
-        elif self.path == "/api/claude":
+        elif path == "/api/claude":
             json_response(self, get_claude_usage())
-        elif self.path == "/api/codex":
+        elif path == "/api/codex":
             json_response(self, get_codex_usage())
-        elif self.path == "/api/power":
+        elif path == "/api/power":
             json_response(self, get_power_usage())
-        elif self.path == "/api/battery-details":
+        elif path == "/api/battery-details":
             json_response(self, get_battery_details())
-        elif self.path == "/api/processes":
+        elif path == "/api/processes":
             json_response(self, get_top_processes())
-        elif self.path == "/api/plan":
+        elif path == "/api/plan":
             json_response(self, get_plan_usage())
-        elif self.path == "/" or self.path == "/index.html":
+        elif path == "/" or path == "/index.html":
             with open("index.html", "rb") as f:
                 content = f.read()
             self.send_response(200)
@@ -892,12 +1091,14 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     psutil.cpu_percent(interval=None)
     get_network_usage()
+    load_power_history()
     start_powermetrics()
     start_plan_usage_monitor()
     start_proc_monitor()
 
-    port = 8080
-    server = HTTPServer(("localhost", port), Handler)
-    print(f"syswatch running → http://localhost:{port}")
+    host = os.environ.get("SYSWATCH_HOST", "127.0.0.1")
+    port = int(os.environ.get("SYSWATCH_PORT", "8080"))
+    server = HTTPServer((host, port), Handler)
+    print(f"syswatch running → http://{host}:{port}")
     print("Note: pour les données de puissance, lancer avec sudo")
     server.serve_forever()

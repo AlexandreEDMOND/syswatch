@@ -4,6 +4,21 @@ Dashboard de monitoring système en temps réel pour macOS (Apple Silicon), avec
 
 ![syswatch dashboard](https://img.shields.io/badge/platform-macOS-lightgrey) ![stack](https://img.shields.io/badge/stack-Python%20%2B%20React-blue)
 
+## Télécharger pour macOS
+
+La version Mac se télécharge depuis les releases GitHub :
+
+**[Télécharger Syswatch pour macOS](https://github.com/AlexandreEDMOND/syswatch/releases/latest)**
+
+Installation :
+
+1. Télécharger le fichier `.dmg` le plus récent.
+2. Ouvrir le `.dmg`.
+3. Glisser `Syswatch.app` dans `Applications`.
+4. Lancer Syswatch depuis `Applications`.
+
+Note: tant que l'app n'est pas signée et notarized avec un compte Apple Developer, macOS peut afficher une alerte de sécurité au premier lancement.
+
 ## Ce que ça monitore
 
 | Panel | Données |
@@ -42,6 +57,55 @@ Le script :
 4. Lance le frontend Vite et ouvre le navigateur
 
 L'interface est accessible sur **http://localhost:5173**
+
+## App macOS
+
+Une transition vers une app macOS Tauri est en cours. Le frontend React est reutilise, et le backend Python est lance automatiquement par l'app.
+
+### Prerequis developpement app
+
+- Node.js + npm
+- uv
+- Rust via rustup: https://rustup.rs/
+- Xcode ou au minimum les Xcode Command Line Tools
+
+### Lancer l'app en developpement
+
+```bash
+cd frontend
+npm install
+npm run app:dev
+```
+
+En mode developpement, Tauri lance le frontend Vite et demarre le backend avec `uv run server.py`.
+
+### Construire une app locale
+
+```bash
+cd frontend
+npm run app:build
+```
+
+Le build Tauri execute d'abord `scripts/build-macos-backend.sh`, qui transforme `server.py` en binaire macOS via PyInstaller, puis produit une app `.app` et un `.dmg`.
+
+Notes:
+
+- le backend ecoute toujours `127.0.0.1:8080` en interne, mais ce detail est cache a l'utilisateur;
+- les donnees `powermetrics` restent en mode degrade sans autorisation admin;
+- pour une distribution GitHub propre, il faudra ensuite ajouter signature Developer ID et notarization Apple.
+
+### Publier une release GitHub
+
+Le workflow GitHub Actions `.github/workflows/release-macos.yml` construit automatiquement les fichiers `.dmg` macOS et les attache a une release quand un tag `v*` est pousse.
+
+Exemple:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+GitHub cree ensuite la release `Syswatch v0.1.0` avec les artefacts macOS. Une fois publiee, le lien `releases/latest` pointe automatiquement vers cette version.
 
 ## Comment fonctionne le panel Claude Code
 

@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import ChartCard from './ChartCard'
+import ThermalMap from './ThermalMap'
 
 const THERMAL_LEVELS = {
   Nominal: { color: 'var(--accent)', label: 'Nominal', score: 25, detail: 'Aucune contrainte thermique visible.' },
@@ -215,6 +216,16 @@ export default function PowerDetail({ power, batteryDetails, thermalSeries, comb
                 </span>
               </div>
             </div>
+          </div>
+
+          <div className="detail-panel thermal-map-card">
+            <div className="power-chart-header">
+              <p className="detail-kicker">Thermal load</p>
+              <span className="power-chart-meta" style={{ color: thermal.color }}>
+                proxy conso mW — {thermal.label}
+              </span>
+            </div>
+            <ThermalMap power={power} batteryDetails={batteryDetails} />
           </div>
         </section>
       </main>

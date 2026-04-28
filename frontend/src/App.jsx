@@ -12,6 +12,14 @@ import BatteryDetail from './components/BatteryDetail'
 const INTERVAL = 3000
 const MAX_POINTS = 60
 const DETAIL_SECTIONS = new Set(['cpu', 'memory', 'network', 'battery', 'storage', 'power', 'claude'])
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+
+function apiFetch(path) {
+  return fetch(`${API_BASE_URL}${path}`).then(r => {
+    if (!r.ok) throw new Error(`API request failed: ${path} (${r.status})`)
+    return r.json()
+  })
+}
 
 function getRoute() {
   const [, first, second] = window.location.pathname.split('/')
@@ -158,13 +166,13 @@ export default function App() {
       const now = new Date().toLocaleTimeString('fr-FR')
       try {
         const [cpu, ram, batteryDetailData, claudeData, powerData, planData, codexData] = await Promise.all([
-          fetch('/api/cpu').then(r => r.json()),
-          fetch('/api/ram').then(r => r.json()),
-          fetch('/api/battery-details').then(r => r.json()),
-          fetch('/api/claude').then(r => r.json()),
-          fetch('/api/power').then(r => r.json()),
-          fetch('/api/plan').then(r => r.json()),
-          fetch('/api/codex').then(r => r.json()),
+          apiFetch('/api/cpu'),
+          apiFetch('/api/ram'),
+          apiFetch('/api/battery-details'),
+          apiFetch('/api/claude'),
+          apiFetch('/api/power'),
+          apiFetch('/api/plan'),
+          apiFetch('/api/codex'),
         ])
 
         // CPU
@@ -375,7 +383,7 @@ export default function App() {
 
         <button type="button" className="panel panel-button panel-power panel-power-compact" onClick={() => openDetail('power')}>
           <div className="panel-label-sm">POWER</div>
-          <PowerCard data={power} />
+          <PowerCard power={power} batteryDetails={batteryDetails} />
         </button>
       </main>
     </div>
